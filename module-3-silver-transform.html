@@ -56,7 +56,7 @@
             <li>
                 <h3 class="step-title">Import the three Silver notebooks</h3>
                 <div class="step-body">
-                    <p>Import <strong>1 - SQL Assessment to Silver</strong>, <strong>2 - Cosmos Property Profiles to Silver</strong>, and <strong>3 - ADLS Appeals to Silver and AI</strong>. Each notebook exposes logical Fabric item names in a parameter cell near the top - set them to the names you recorded in Goal 1. Attach <code>SilverLakehouse</code> as the default and add <code>BronzeLakehouse</code> as a source. In this goal you run notebook 3's <strong>ingestion</strong> cells only; its AI cells run in Goal 3.</p>
+                    <p>Import <strong>1 - SQL Assessment to Silver</strong>, <strong>2 - Cosmos Property Profiles to Silver</strong>, and <strong>3 - ADLS Appeals to Silver and AI</strong>. Each notebook exposes logical Fabric item names in a parameter cell near the top - set them to the names you recorded in Goal 1. Attach <code>SilverLakehouse</code> as the default and add <code>BronzeLakehouse</code> as a source. <strong>Notebook 3 has two halves</strong> - in Goal 2 you run only its top <strong>ingestion</strong> cells (they build <code>fact_appeal</code>); do <em>not</em> Run-All. Its AI cells run later in Goal 3.</p>
                 </div>
             </li>
         </ol>
@@ -165,7 +165,7 @@ for source_table, (target_table, source_keys) in table_map.items():
                 <h3 class="step-title">Step 4 - Flatten one property profile per parcel</h3>
                 <div class="step-body">
                     <p>Paste this prompt into Copilot. The GeoJSON <code>coordinates</code> array is <strong>longitude first</strong>, then latitude:</p>
-<div class="code-block">
+<div class="code-block prompt">
 <span class="lang-badge">Copilot prompt</span>
 <pre><code>From the raw Cosmos DataFrame, create a DataFrame named profiles with one row per parcel. Select and rename these fields: parcelId to parcel_id; documentType to document_type; synthetic cast to boolean; neighborhoodId and neighborhoodName to snake_case; jurisdiction.countryCode, regionCode, and currencyCode to country_code, region_code, and currency_code; GeoJSON location.coordinates element 0 cast to double as longitude and element 1 cast to double as latitude; site.syntheticAddress, propertyClassCode, zoningCode, and lotAreaSquareMetres to snake_case with the area cast to double; building.type, yearBuilt, floorAreaSquareMetres, and condition to building_type, year_built, floor_area_square_metres, and building_condition with numeric casts; and currentAssessment.taxYear, assessedValue, and confidenceScore to current_tax_year, current_assessed_value, and confidence_score with numeric casts. Drop rows with null parcel_id or neighborhood_id and de-duplicate by parcel_id. Write profiles in overwrite mode with overwriteSchema true as the managed Delta table dbo.property_profile.</code></pre>
 </div>
@@ -175,7 +175,7 @@ for source_table, (target_table, source_keys) in table_map.items():
                 <h3 class="step-title">Step 5 - Explode inspection history</h3>
                 <div class="step-body">
                     <p>Paste this prompt into Copilot. <code>explode_outer</code> keeps parcels that have no inspections, and we retain the <code>observations</code> array:</p>
-<div class="code-block">
+<div class="code-block prompt">
 <span class="lang-badge">Copilot prompt</span>
 <pre><code>From raw, create an inspections DataFrame by selecting parcelId as parcel_id and using explode_outer on the inspections array into a struct named inspection. Flatten the struct into inspection_id, inspection_date cast to date, inspection_type, condition, observations, and follow_up_required cast to boolean. Drop rows with null parcel_id or inspection_id and de-duplicate by inspection_id. Write the result in overwrite mode with overwriteSchema true as the managed Delta table dbo.fact_inspection.</code></pre>
 </div>

@@ -278,6 +278,10 @@ pre code {
 }
 .code-block pre { margin: 0; }
 
+/* Copilot prompt blocks: wrap the prose and start below the badge + buttons so nothing overlaps */
+.code-block.prompt pre code { white-space: pre-wrap; word-break: break-word; }
+.code-block.prompt pre { padding-top: 66px; }
+
 /* Copy button on code blocks */
 .code-block .copy-btn {
     position: absolute;
