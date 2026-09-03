@@ -55,7 +55,51 @@
             <li>
                 <h3 class="step-title">Import the Gold notebook</h3>
                 <div class="step-body">
-                    <p>Import <strong>4 - Property Assessment Gold Marts</strong>. Set <code>GoldLakehouse</code> as the default and add <code>SilverLakehouse</code> as a source.</p>
+                    <p>Import <strong>4 - Property Assessment Gold Marts</strong>. Set <code>GoldLakehouse</code> as the default. The notebook resolves <code>SilverLakehouse</code> by name and loads each Silver table as a temporary view (<code>silver_*</code>):</p>
+<div class="code-block">
+<span class="lang-badge">Configure cell</span>
+<pre><code>%%configure -f
+{
+  "defaultLakehouse": { "name": "GoldLakehouse" }
+}</code></pre>
+</div>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>silver_lakehouse_item = "SilverLakehouse"
+source_schema = "dbo"
+appeal_ai_source_table = "fact_appeal_ai"  # Use fact_appeal_foundry_ai for notebook 3a</code></pre>
+</div>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>import requests
+from pyspark.sql import functions as F
+
+import notebookutils
+workspace_id = notebookutils.runtime.context["currentWorkspaceId"]
+
+def resolve_item_id(display_name, item_type):
+    token = notebookutils.credentials.getToken("pbi")
+    url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items?type={item_type}"
+    response = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=60)
+    response.raise_for_status()
+    matches = [item for item in response.json()["value"] if item["displayName"] == display_name]
+    if len(matches) != 1:
+        raise ValueError(f"Expected one {item_type} named '{display_name}', found {len(matches)}")
+    return matches[0]["id"]
+
+silver_id = resolve_item_id(silver_lakehouse_item, "Lakehouse")
+silver_tables = [
+    "dim_neighborhood", "dim_property_class", "dim_parcel", "dim_building",
+    "fact_assessment", "fact_sale", "fact_tax_rate", "property_profile",
+    "fact_inspection"
+]
+for table in silver_tables:
+    path = f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{silver_id}/Tables/{source_schema}/{table}"
+    spark.read.format("delta").load(path).createOrReplaceTempView(f"silver_{table}")
+appeal_path = f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{silver_id}/Tables/{source_schema}/{appeal_ai_source_table}"
+spark.read.format("delta").load(appeal_path).createOrReplaceTempView("silver_fact_appeal_ai")
+spark.sql("CREATE SCHEMA IF NOT EXISTS dbo")</code></pre>
+</div>
                 </div>
             </li>
         </ol>
@@ -65,41 +109,43 @@
         <h2>property_assessment_mart</h2>
         <p><em>What is the latest assessed value and estimated tax for each property?</em></p>
 <div class="code-block">
-<span class="lang-badge">Spark SQL</span>
-<pre><code>%%sql
-CREATE OR REPLACE TABLE dbo.property_assessment_mart AS
+<span class="lang-badge">PySpark</span>
+<pre><code>property_mart = spark.sql("""
 WITH latest_assessment AS (
-    SELECT *, ROW_NUMBER() OVER (PARTITION BY parcel_id ORDER BY tax_year DESC) AS recency_rank
-    FROM SilverLakehouse.fact_assessment
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY parcel_id ORDER BY tax_year DESC) AS recency_rank
+  FROM silver_fact_assessment
 ), primary_building AS (
-    SELECT *, ROW_NUMBER() OVER (PARTITION BY parcel_id ORDER BY floor_area_square_metres DESC, building_id) AS building_rank
-    FROM SilverLakehouse.dim_building
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY parcel_id ORDER BY floor_area_square_metres DESC, building_id) AS building_rank
+  FROM silver_dim_building
 ), latest_inspection AS (
-    SELECT *, ROW_NUMBER() OVER (PARTITION BY parcel_id ORDER BY inspection_date DESC) AS recency_rank
-    FROM SilverLakehouse.fact_inspection
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY parcel_id ORDER BY inspection_date DESC) AS recency_rank
+  FROM silver_fact_inspection
 )
 SELECT
-    p.parcel_id, p.parcel_number, p.synthetic_address, p.neighborhood_id,
-    n.neighborhood_name, n.market_area, p.property_class_code,
-    pc.property_class_name, p.lot_area_square_metres, p.zoning_code,
-    b.building_type, b.year_built, b.floor_area_square_metres, b.condition_code,
-    a.tax_year, a.land_value, a.improvement_value, a.assessed_value,
-    a.confidence_score,
-    r.municipal_rate + r.regional_rate + r.education_rate AS combined_rate,
-    a.assessed_value * (r.municipal_rate + r.regional_rate + r.education_rate) AS estimated_tax,
-    pp.longitude, pp.latitude,
-    i.inspection_date AS latest_inspection_date,
-    i.condition       AS latest_inspection_condition,
-    i.follow_up_required
-FROM SilverLakehouse.dim_parcel p
-JOIN SilverLakehouse.dim_neighborhood   n  ON n.neighborhood_id = p.neighborhood_id
-JOIN SilverLakehouse.dim_property_class pc ON pc.property_class_code = p.property_class_code
+  p.parcel_id, p.parcel_number, p.synthetic_address, p.neighborhood_id,
+  n.neighborhood_name, n.market_area, p.property_class_code,
+  pc.property_class_name, p.lot_area_square_metres, p.zoning_code,
+  b.building_type, b.year_built, b.floor_area_square_metres, b.condition_code,
+  a.tax_year, a.land_value, a.improvement_value, a.assessed_value,
+  a.confidence_score,
+  r.municipal_rate + r.regional_rate + r.education_rate AS combined_rate,
+  a.assessed_value * (r.municipal_rate + r.regional_rate + r.education_rate) AS estimated_tax,
+  pp.longitude, pp.latitude,
+  i.inspection_date AS latest_inspection_date,
+  i.condition AS latest_inspection_condition,
+  i.follow_up_required
+FROM silver_dim_parcel p
+JOIN silver_dim_neighborhood n ON n.neighborhood_id = p.neighborhood_id
+JOIN silver_dim_property_class pc ON pc.property_class_code = p.property_class_code
 LEFT JOIN primary_building b ON b.parcel_id = p.parcel_id AND b.building_rank = 1
 JOIN latest_assessment a ON a.parcel_id = p.parcel_id AND a.recency_rank = 1
-JOIN SilverLakehouse.fact_tax_rate r ON r.tax_year = a.tax_year
-                                     AND r.property_class_code = p.property_class_code
-LEFT JOIN SilverLakehouse.property_profile pp ON pp.parcel_id = p.parcel_id
-LEFT JOIN latest_inspection i ON i.parcel_id = p.parcel_id AND i.recency_rank = 1;</code></pre>
+JOIN silver_fact_tax_rate r ON r.tax_year = a.tax_year AND r.property_class_code = p.property_class_code
+LEFT JOIN silver_property_profile pp ON pp.parcel_id = p.parcel_id
+LEFT JOIN latest_inspection i ON i.parcel_id = p.parcel_id AND i.recency_rank = 1
+""")
+(property_mart.write.format("delta").mode("overwrite")
+    .option("overwriteSchema", "true").saveAsTable("dbo.property_assessment_mart"))
+property_mart.createOrReplaceTempView("gold_property_assessment_mart")</code></pre>
 </div>
     </section>
 
@@ -107,29 +153,32 @@ LEFT JOIN latest_inspection i ON i.parcel_id = p.parcel_id AND i.recency_rank = 
         <h2>comparable_sales_mart</h2>
         <p><em>Which assessments differ materially from arm's-length sale values?</em></p>
 <div class="code-block">
-<span class="lang-badge">Spark SQL</span>
-<pre><code>%%sql
-CREATE OR REPLACE TABLE dbo.comparable_sales_mart AS
+<span class="lang-badge">PySpark</span>
+<pre><code>sales_mart = spark.sql("""
 WITH sale_assessment AS (
-    SELECT
-        s.sale_id, s.parcel_id, s.sale_date, s.sale_price, s.sale_type, s.is_arms_length,
-        p.neighborhood_id, p.property_class_code, a.tax_year AS assessment_tax_year,
-        a.assessed_value,
-        ROW_NUMBER() OVER (
-            PARTITION BY s.sale_id
-            ORDER BY ABS(a.tax_year - YEAR(s.sale_date)), a.tax_year DESC
-        ) AS year_match_rank
-    FROM SilverLakehouse.fact_sale s
-    JOIN SilverLakehouse.dim_parcel      p ON p.parcel_id = s.parcel_id
-    JOIN SilverLakehouse.fact_assessment a ON a.parcel_id = s.parcel_id
-    WHERE s.is_arms_length = true
+SELECT
+  s.sale_id, s.parcel_id, s.sale_date, s.sale_price, s.sale_type, s.is_arms_length,
+  p.neighborhood_id, p.property_class_code, a.tax_year AS assessment_tax_year,
+  a.assessed_value,
+  ROW_NUMBER() OVER (
+    PARTITION BY s.sale_id
+    ORDER BY ABS(a.tax_year - YEAR(s.sale_date)), a.tax_year DESC
+  ) AS year_match_rank
+FROM silver_fact_sale s
+JOIN silver_dim_parcel p ON p.parcel_id = s.parcel_id
+JOIN silver_fact_assessment a ON a.parcel_id = s.parcel_id
+WHERE s.is_arms_length = true
 )
 SELECT
-    sale_id, parcel_id, sale_date, sale_price, sale_type, is_arms_length,
-    neighborhood_id, property_class_code, assessment_tax_year, assessed_value,
-    assessed_value / NULLIF(sale_price, 0) AS assessment_to_sale_ratio
+  sale_id, parcel_id, sale_date, sale_price, sale_type, is_arms_length,
+  neighborhood_id, property_class_code, assessment_tax_year, assessed_value,
+  assessed_value / NULLIF(sale_price, 0) AS assessment_to_sale_ratio
 FROM sale_assessment
-WHERE year_match_rank = 1;</code></pre>
+WHERE year_match_rank = 1
+""")
+(sales_mart.write.format("delta").mode("overwrite")
+    .option("overwriteSchema", "true").saveAsTable("dbo.comparable_sales_mart"))
+sales_mart.createOrReplaceTempView("gold_comparable_sales_mart")</code></pre>
 </div>
     </section>
 
@@ -137,22 +186,23 @@ WHERE year_match_rank = 1;</code></pre>
         <h2>appeal_intelligence_mart</h2>
         <p><em>What drives appeals, and where are urgent or negative narratives concentrated?</em></p>
 <div class="code-block">
-<span class="lang-badge">Spark SQL</span>
-<pre><code>%%sql
--- appeal_ai_source_table = fact_appeal_ai (built-in) or fact_appeal_foundry_ai (Foundry, notebook 3a)
-CREATE OR REPLACE TABLE dbo.appeal_intelligence_mart AS
+<span class="lang-badge">PySpark</span>
+<pre><code>appeal_mart = spark.sql("""
 SELECT
-    a.*, n.neighborhood_name, n.market_area, p.property_class_code,
-    pc.property_class_name, ass.assessed_value,
-    ass.assessed_value * (r.municipal_rate + r.regional_rate + r.education_rate) AS estimated_tax,
-    CASE WHEN lower(a.ai_follow_up) = 'urgent_follow_up' THEN true ELSE false END AS urgent_follow_up
-FROM SilverLakehouse.fact_appeal_ai a
-JOIN SilverLakehouse.dim_parcel         p   ON p.parcel_id = a.parcel_id
-JOIN SilverLakehouse.dim_neighborhood   n   ON n.neighborhood_id = p.neighborhood_id
-JOIN SilverLakehouse.dim_property_class pc  ON pc.property_class_code = p.property_class_code
-JOIN SilverLakehouse.fact_assessment    ass ON ass.parcel_id = a.parcel_id AND ass.tax_year = a.tax_year
-JOIN SilverLakehouse.fact_tax_rate      r   ON r.tax_year = ass.tax_year
-                                            AND r.property_class_code = p.property_class_code;</code></pre>
+  a.*, n.neighborhood_name, n.market_area, p.property_class_code,
+  pc.property_class_name, ass.assessed_value,
+  ass.assessed_value * (r.municipal_rate + r.regional_rate + r.education_rate) AS estimated_tax,
+  CASE WHEN lower(a.ai_follow_up) = 'urgent_follow_up' THEN true ELSE false END AS urgent_follow_up
+FROM silver_fact_appeal_ai a
+JOIN silver_dim_parcel p ON p.parcel_id = a.parcel_id
+JOIN silver_dim_neighborhood n ON n.neighborhood_id = p.neighborhood_id
+JOIN silver_dim_property_class pc ON pc.property_class_code = p.property_class_code
+JOIN silver_fact_assessment ass ON ass.parcel_id = a.parcel_id AND ass.tax_year = a.tax_year
+JOIN silver_fact_tax_rate r ON r.tax_year = ass.tax_year AND r.property_class_code = p.property_class_code
+""")
+(appeal_mart.write.format("delta").mode("overwrite")
+    .option("overwriteSchema", "true").saveAsTable("dbo.appeal_intelligence_mart"))
+appeal_mart.createOrReplaceTempView("gold_appeal_intelligence_mart")</code></pre>
 </div>
     </section>
 
@@ -160,39 +210,44 @@ JOIN SilverLakehouse.fact_tax_rate      r   ON r.tax_year = ass.tax_year
         <h2>neighborhood_equity_mart</h2>
         <p><em>Which neighbourhoods show unusual sales ratios, valuation changes, or appeal rates?</em></p>
 <div class="code-block">
-<span class="lang-badge">Spark SQL</span>
-<pre><code>%%sql
-CREATE OR REPLACE TABLE dbo.neighborhood_equity_mart AS
+<span class="lang-badge">PySpark</span>
+<pre><code>neighborhood_mart = spark.sql("""
 WITH property_summary AS (
-    SELECT neighborhood_id, neighborhood_name, market_area,
-        COUNT(DISTINCT parcel_id) AS parcel_count,
-        AVG(assessed_value)       AS average_assessed_value,
-        SUM(estimated_tax)        AS estimated_tax_total
-    FROM dbo.property_assessment_mart
-    GROUP BY neighborhood_id, neighborhood_name, market_area
+  SELECT neighborhood_id, neighborhood_name, market_area,
+    COUNT(DISTINCT parcel_id) AS parcel_count,
+    AVG(assessed_value) AS average_assessed_value,
+    SUM(estimated_tax) AS estimated_tax_total
+  FROM gold_property_assessment_mart
+  GROUP BY neighborhood_id, neighborhood_name, market_area
 ), sales_summary AS (
-    SELECT neighborhood_id, AVG(assessment_to_sale_ratio) AS average_assessment_to_sale_ratio
-    FROM dbo.comparable_sales_mart
-    GROUP BY neighborhood_id
+  SELECT neighborhood_id, AVG(assessment_to_sale_ratio) AS average_assessment_to_sale_ratio
+  FROM gold_comparable_sales_mart
+  GROUP BY neighborhood_id
 ), appeal_summary AS (
-    SELECT neighborhood_id,
-        COUNT(DISTINCT appeal_id) AS appeal_count,
-        COUNT(DISTINCT parcel_id) AS appealed_parcel_count,
-        AVG(CASE WHEN lower(ai_sentiment) = 'negative' THEN 1.0 ELSE 0.0 END) AS negative_sentiment_rate,
-        AVG(requested_adjustment_pct) AS average_requested_adjustment_pct
-    FROM dbo.appeal_intelligence_mart
-    GROUP BY neighborhood_id
+  SELECT neighborhood_id,
+    COUNT(DISTINCT appeal_id) AS appeal_count,
+    COUNT(DISTINCT parcel_id) AS appealed_parcel_count,
+    AVG(CASE WHEN lower(ai_sentiment) = 'negative' THEN 1.0 ELSE 0.0 END) AS negative_sentiment_rate,
+    AVG(requested_adjustment_pct) AS average_requested_adjustment_pct
+  FROM gold_appeal_intelligence_mart
+  GROUP BY neighborhood_id
 )
 SELECT p.*,
-    s.average_assessment_to_sale_ratio,
-    COALESCE(a.appeal_count, 0)           AS appeal_count,
-    COALESCE(a.appealed_parcel_count, 0)  AS appealed_parcel_count,
-    COALESCE(a.appealed_parcel_count, 0) / NULLIF(p.parcel_count, 0) AS appeal_rate,
-    a.negative_sentiment_rate,
-    a.average_requested_adjustment_pct
+  s.average_assessment_to_sale_ratio,
+  COALESCE(a.appeal_count, 0) AS appeal_count,
+  COALESCE(a.appealed_parcel_count, 0) AS appealed_parcel_count,
+  COALESCE(a.appealed_parcel_count, 0) / NULLIF(p.parcel_count, 0) AS appeal_rate,
+  a.negative_sentiment_rate,
+  a.average_requested_adjustment_pct
 FROM property_summary p
-LEFT JOIN sales_summary  s ON s.neighborhood_id = p.neighborhood_id
-LEFT JOIN appeal_summary a ON a.neighborhood_id = p.neighborhood_id;</code></pre>
+LEFT JOIN sales_summary s ON s.neighborhood_id = p.neighborhood_id
+LEFT JOIN appeal_summary a ON a.neighborhood_id = p.neighborhood_id
+""")
+(neighborhood_mart.write.format("delta").mode("overwrite")
+    .option("overwriteSchema", "true").saveAsTable("dbo.neighborhood_equity_mart"))
+
+for table in ["property_assessment_mart", "comparable_sales_mart", "appeal_intelligence_mart", "neighborhood_equity_mart"]:
+    print(f"{table}: {spark.table(f'dbo.{table}').count()} rows")</code></pre>
 </div>
 
     </section>

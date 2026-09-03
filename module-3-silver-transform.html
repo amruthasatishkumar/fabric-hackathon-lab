@@ -70,41 +70,77 @@
                 <div class="step-body">
                     <p>Snake-case every column, trim strings, enforce the business keys, and write one managed Delta table per source. The <code>Assessment</code> table re-derives <code>assessed_value</code> (mirroring may drop the computed column), and <code>TaxRate</code> becomes <code>fact_tax_rate</code> keeping its <code>municipal_rate</code>, <code>regional_rate</code>, and <code>education_rate</code> components (Gold combines them):</p>
 <div class="code-block">
+<span class="lang-badge">Configure cell</span>
+<pre><code>%%configure -f
+{
+  "defaultLakehouse": { "name": "SilverLakehouse" }
+}</code></pre>
+</div>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>sql_mirror_item = "Property Assessment SQL Mirror"
+source_schema = "dbo"</code></pre>
+</div>
+<div class="code-block">
 <span class="lang-badge">PySpark</span>
 <pre><code>import re
+import requests
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType
+
+import notebookutils
+workspace_id = notebookutils.runtime.context["currentWorkspaceId"]
+
+def resolve_item_id(display_name, item_type):
+    token = notebookutils.credentials.getToken("pbi")
+    url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items?type={item_type}"
+    response = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=60)
+    response.raise_for_status()
+    matches = [item for item in response.json()["value"] if item["displayName"] == display_name]
+    if len(matches) != 1:
+        raise ValueError(f"Expected one {item_type} named '{display_name}', found {len(matches)}")
+    return matches[0]["id"]
 
 def snake_case(name):
     name = re.sub(r"(?&lt;=[a-z0-9])(?=[A-Z])", "_", name)
     return name.replace(" ", "_").lower()
 
-# source SQL table -> (Silver table, business keys that must be unique)
-table_map = {
-    "Jurisdiction":  ("dim_jurisdiction",   ["JurisdictionId"]),
-    "Neighborhood":  ("dim_neighborhood",   ["NeighborhoodId"]),
+mirror_id = resolve_item_id(sql_mirror_item, "MirroredDatabase")
+spark.sql("CREATE SCHEMA IF NOT EXISTS dbo")
+print(f"Resolved SQL mirror: {mirror_id}")</code></pre>
+</div>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>table_map = {
+    "Jurisdiction": ("dim_jurisdiction", ["JurisdictionId"]),
+    "Neighborhood": ("dim_neighborhood", ["NeighborhoodId"]),
     "PropertyClass": ("dim_property_class", ["PropertyClassCode"]),
-    "Parcel":        ("dim_parcel",         ["ParcelId"]),
-    "Building":      ("dim_building",        ["BuildingId"]),
-    "Assessment":    ("fact_assessment",     ["ParcelId", "TaxYear"]),
-    "Sale":          ("fact_sale",           ["SaleId"]),
-    "TaxRate":       ("fact_tax_rate",       ["TaxYear", "PropertyClassCode"]),
+    "Parcel": ("dim_parcel", ["ParcelId"]),
+    "Building": ("dim_building", ["BuildingId"]),
+    "Assessment": ("fact_assessment", ["ParcelId", "TaxYear"]),
+    "Sale": ("fact_sale", ["SaleId"]),
+    "TaxRate": ("fact_tax_rate", ["TaxYear", "PropertyClassCode"]),
 }
 
 for source_table, (target_table, source_keys) in table_map.items():
-    frame = spark.read.table(f"BronzeLakehouse.{source_table}")
-    for column in frame.columns:                       # snake_case every column
+    path = (
+        f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/"
+        f"{mirror_id}/Tables/{source_schema}/{source_table}"
+    )
+    frame = spark.read.format("delta").load(path)
+    for column in frame.columns:
         frame = frame.withColumnRenamed(column, snake_case(column))
-    for field in frame.schema.fields:                  # trim string columns
+    for field in frame.schema.fields:
         if isinstance(field.dataType, StringType):
             frame = frame.withColumn(field.name, F.trim(F.col(field.name)))
-    if target_table == "fact_assessment":              # re-derive computed column
+    if target_table == "fact_assessment":
         frame = frame.withColumn("assessed_value", F.col("land_value") + F.col("improvement_value"))
-    keys = [snake_case(k) for k in source_keys]
+    keys = [snake_case(key) for key in source_keys]
     frame = frame.dropna(subset=keys).dropDuplicates(keys)
     (frame.write.format("delta").mode("overwrite")
-          .option("overwriteSchema", "true").saveAsTable(target_table))
-    print(target_table, frame.count(), "rows")</code></pre>
+        .option("overwriteSchema", "true")
+        .saveAsTable(f"dbo.{target_table}"))
+    print(f"{target_table}: {frame.count()} rows")</code></pre>
 </div>
                     <div class="callout info">
                         <span class="callout-icon">ⓘ</span>
@@ -118,82 +154,31 @@ for source_table, (target_table, source_keys) in table_map.items():
     </section>
 
     <section id="notebook-2">
-        <h2>Notebook 2 - Cosmos Property Profiles to Silver</h2>
+        <h2>Notebook 2 - Cosmos Property Profiles to Silver (Copilot-guided)</h2>
+        <p>This is a <strong>guided discovery notebook</strong> - it ships as prompts, not finished code. Paste each prompt into the notebook's Copilot, place the generated code in the empty cell below it, run it, and check the verification note. Steps 1-3 attach the Silver Lakehouse, set the mirror parameters, and read the mirrored Cosmos table into <code>raw</code>.</p>
         <ol class="step-list">
             <li>
-                <h3 class="step-title">Flatten the property document</h3>
+                <h3 class="step-title">Step 4 - Flatten one property profile per parcel</h3>
                 <div class="step-body">
-                    <p>Read the mirrored Cosmos <code>properties</code> container and flatten the nested <code>jurisdiction</code>, <code>location</code>, <code>site</code>, <code>building</code>, and <code>currentAssessment</code> objects into one row per parcel. The GeoJSON <code>coordinates</code> array is <strong>longitude first</strong>, then latitude:</p>
+                    <p>Paste this prompt into Copilot. The GeoJSON <code>coordinates</code> array is <strong>longitude first</strong>, then latitude:</p>
 <div class="code-block">
-<span class="lang-badge">PySpark</span>
-<pre><code>raw = spark.read.table("BronzeLakehouse.properties")
-
-property_profile = (
-    raw
-    .withColumn("parcel_id",               F.col("parcelId"))
-    .withColumn("document_type",           F.col("documentType"))
-    .withColumn("synthetic",               F.col("synthetic").cast("boolean"))
-    .withColumn("neighborhood_id",         F.col("neighborhoodId"))
-    .withColumn("neighborhood_name",       F.col("neighborhoodName"))
-    .withColumn("country_code",            F.col("jurisdiction.countryCode"))
-    .withColumn("region_code",             F.col("jurisdiction.regionCode"))
-    .withColumn("currency_code",           F.col("jurisdiction.currencyCode"))
-    .withColumn("longitude",               F.col("location.coordinates")[0].cast("double"))  # GeoJSON: longitude first
-    .withColumn("latitude",                F.col("location.coordinates")[1].cast("double"))
-    .withColumn("synthetic_address",       F.col("site.syntheticAddress"))
-    .withColumn("property_class_code",     F.col("site.propertyClassCode"))
-    .withColumn("zoning_code",             F.col("site.zoningCode"))
-    .withColumn("lot_area_square_metres",  F.col("site.lotAreaSquareMetres").cast("double"))
-    .withColumn("building_type",           F.col("building.type"))
-    .withColumn("year_built",              F.col("building.yearBuilt").cast("int"))
-    .withColumn("floor_area_square_metres",F.col("building.floorAreaSquareMetres").cast("double"))
-    .withColumn("building_condition",      F.col("building.condition"))
-    .withColumn("current_tax_year",        F.col("currentAssessment.taxYear").cast("int"))
-    .withColumn("current_assessed_value",  F.col("currentAssessment.assessedValue").cast("double"))
-    .withColumn("confidence_score",        F.col("currentAssessment.confidenceScore").cast("double"))
-    .select("parcel_id", "document_type", "synthetic", "neighborhood_id", "neighborhood_name",
-            "country_code", "region_code", "currency_code", "longitude", "latitude",
-            "synthetic_address", "property_class_code", "zoning_code", "lot_area_square_metres",
-            "building_type", "year_built", "floor_area_square_metres", "building_condition",
-            "current_tax_year", "current_assessed_value", "confidence_score")
-    .dropna(subset=["parcel_id", "neighborhood_id"])
-    .dropDuplicates(["parcel_id"])
-)
-(property_profile.write.format("delta").mode("overwrite")
-    .option("overwriteSchema", "true").saveAsTable("property_profile"))</code></pre>
+<span class="lang-badge">Copilot prompt</span>
+<pre><code>From the raw Cosmos DataFrame, create a DataFrame named profiles with one row per parcel. Select and rename these fields: parcelId to parcel_id; documentType to document_type; synthetic cast to boolean; neighborhoodId and neighborhoodName to snake_case; jurisdiction.countryCode, regionCode, and currencyCode to country_code, region_code, and currency_code; GeoJSON location.coordinates element 0 cast to double as longitude and element 1 cast to double as latitude; site.syntheticAddress, propertyClassCode, zoningCode, and lotAreaSquareMetres to snake_case with the area cast to double; building.type, yearBuilt, floorAreaSquareMetres, and condition to building_type, year_built, floor_area_square_metres, and building_condition with numeric casts; and currentAssessment.taxYear, assessedValue, and confidenceScore to current_tax_year, current_assessed_value, and confidence_score with numeric casts. Drop rows with null parcel_id or neighborhood_id and de-duplicate by parcel_id. Write profiles in overwrite mode with overwriteSchema true as the managed Delta table dbo.property_profile.</code></pre>
 </div>
                 </div>
             </li>
             <li>
-                <h3 class="step-title">Explode the inspections array</h3>
+                <h3 class="step-title">Step 5 - Explode inspection history</h3>
                 <div class="step-body">
-                    <p>Each profile carries an <code>inspections[]</code> array. Use <code>explode_outer</code> so parcels without inspections are retained, and keep the <code>observations</code> array:</p>
+                    <p>Paste this prompt into Copilot. <code>explode_outer</code> keeps parcels that have no inspections, and we retain the <code>observations</code> array:</p>
 <div class="code-block">
-<span class="lang-badge">PySpark</span>
-<pre><code>fact_inspection = (
-    raw
-    .withColumn("parcel_id", F.col("parcelId"))
-    .withColumn("inspection", F.explode_outer("inspections"))
-    .select(
-        "parcel_id",
-        F.col("inspection.inspectionId").alias("inspection_id"),
-        F.col("inspection.inspectionDate").cast("date").alias("inspection_date"),
-        F.col("inspection.inspectionType").alias("inspection_type"),
-        F.col("inspection.condition").alias("condition"),
-        F.col("inspection.observations").alias("observations"),
-        F.col("inspection.followUpRequired").cast("boolean").alias("follow_up_required"),
-    )
-    .dropna(subset=["parcel_id", "inspection_id"])
-    .dropDuplicates(["inspection_id"])
-)
-(fact_inspection.write.format("delta").mode("overwrite")
-    .option("overwriteSchema", "true").saveAsTable("fact_inspection"))
-print("fact_inspection:", fact_inspection.count(), "rows")</code></pre>
+<span class="lang-badge">Copilot prompt</span>
+<pre><code>From raw, create an inspections DataFrame by selecting parcelId as parcel_id and using explode_outer on the inspections array into a struct named inspection. Flatten the struct into inspection_id, inspection_date cast to date, inspection_type, condition, observations, and follow_up_required cast to boolean. Drop rows with null parcel_id or inspection_id and de-duplicate by inspection_id. Write the result in overwrite mode with overwriteSchema true as the managed Delta table dbo.fact_inspection.</code></pre>
 </div>
                     <div class="callout info">
                         <span class="callout-icon">ⓘ</span>
                         <div class="callout-content">
-                            <code>explode_outer</code> turns one document with an array of inspections into tidy rows - the shape a star-schema join and a semantic model expect.
+                            Step 6 then adds quality checks (all synthetic, no null coordinates, unique keys). Do not open the <code>Answers</code> folder unless your facilitator directs you to.
                         </div>
                     </div>
                 </div>
@@ -207,26 +192,63 @@ print("fact_inspection:", fact_inspection.count(), "rows")</code></pre>
             <li>
                 <h3 class="step-title">Conform the appeals into <code>fact_appeal</code></h3>
                 <div class="step-body">
-                    <p>Import <strong>3 - ADLS Appeals to Silver and AI</strong> and run its <strong>ingestion cells now</strong> - the AI cells run in Goal 3. Read the Parquet from the Bronze <code>appeals</code> shortcut, snake-case and type the columns, keep the raw <code>narrative</code> and <code>ground_truth_sentiment</code>, and write <code>fact_appeal</code>:</p>
+                    <p>Import <strong>3 - ADLS Appeals to Silver and AI</strong> and run its <strong>ingestion cells now</strong> - the AI cells run in Goal 3. It resolves the Bronze Lakehouse, reads the appeal Parquet through the <code>appeals</code> shortcut, snake-cases and types the columns, keeps the raw <code>narrative</code> and <code>ground_truth_sentiment</code>, and writes <code>dbo.fact_appeal</code>:</p>
+<div class="code-block">
+<span class="lang-badge">Configure cell</span>
+<pre><code>%%configure -f
+{
+  "defaultLakehouse": { "name": "SilverLakehouse" }
+}</code></pre>
+</div>
 <div class="code-block">
 <span class="lang-badge">PySpark</span>
-<pre><code>raw = spark.read.parquet("Files/appeals/assessment_appeals.parquet")  # BronzeLakehouse shortcut
-for column in raw.columns:
-    raw = raw.withColumnRenamed(column, snake_case(column))
+<pre><code>bronze_lakehouse_item = "BronzeLakehouse"
+appeal_file_path = "Files/appeals/assessment_appeals.parquet"</code></pre>
+</div>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>import re
+import requests
+from pyspark.sql import functions as F
 
-fact_appeal = (
-    raw
-    .withColumn("tax_year",                 F.col("tax_year").cast("int"))
-    .withColumn("submitted_date",           F.to_date("submitted_date"))
-    .withColumn("resolved_date",            F.to_date("resolved_date"))
+import notebookutils
+workspace_id = notebookutils.runtime.context["currentWorkspaceId"]
+
+def resolve_item_id(display_name, item_type):
+    token = notebookutils.credentials.getToken("pbi")
+    url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items?type={item_type}"
+    response = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=60)
+    response.raise_for_status()
+    matches = [item for item in response.json()["value"] if item["displayName"] == display_name]
+    if len(matches) != 1:
+        raise ValueError(f"Expected one {item_type} named '{display_name}', found {len(matches)}")
+    return matches[0]["id"]
+
+def snake_case(name):
+    return re.sub(r"(?&lt;=[a-z0-9])(?=[A-Z])", "_", name).lower()
+
+bronze_id = resolve_item_id(bronze_lakehouse_item, "Lakehouse")
+source_path = f"abfss://{workspace_id}@onelake.dfs.fabric.microsoft.com/{bronze_id}/{appeal_file_path}"
+raw = spark.read.parquet(source_path)
+for column in raw.columns:
+    raw = raw.withColumnRenamed(column, snake_case(column))</code></pre>
+</div>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>appeals = (raw
+    .withColumn("tax_year", F.col("tax_year").cast("int"))
+    .withColumn("submitted_date", F.to_date("submitted_date"))
+    .withColumn("resolved_date", F.to_date("resolved_date"))
     .withColumn("requested_adjustment_pct", F.col("requested_adjustment_pct").cast("double"))
-    .withColumn("synthetic",                F.col("synthetic").cast("boolean"))
+    .withColumn("synthetic", F.col("synthetic").cast("boolean"))
     .dropna(subset=["appeal_id", "parcel_id", "reason_code", "narrative"])
-    .dropDuplicates(["appeal_id"])
-)
-(fact_appeal.write.format("delta").mode("overwrite")
-    .option("overwriteSchema", "true").saveAsTable("fact_appeal"))
-print("fact_appeal:", fact_appeal.count(), "rows")</code></pre>
+    .dropDuplicates(["appeal_id"]))
+
+assert appeals.filter(F.col("synthetic") != True).count() == 0
+assert appeals.filter(F.length(F.trim("narrative")) == 0).count() == 0
+(appeals.write.format("delta").mode("overwrite")
+    .option("overwriteSchema", "true").saveAsTable("dbo.fact_appeal"))
+print(f"Conformed appeals: {appeals.count()}")</code></pre>
 </div>
                     <div class="callout info">
                         <span class="callout-icon">ⓘ</span>

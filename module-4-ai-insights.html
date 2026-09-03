@@ -60,21 +60,20 @@
 <pre><code>import pandas as pd
 import synapse.ml.aifunc as aifunc
 
-pdf = spark.table("fact_appeal").toPandas()
+pdf = appeals.toPandas()
 text = pdf["narrative"].astype(str)
-
-pdf["ai_sentiment"]  = text.ai.analyze_sentiment()
-pdf["ai_summary"]    = text.ai.summarize()
+pdf["ai_sentiment"] = text.ai.analyze_sentiment()
+pdf["ai_summary"] = text.ai.summarize()
 pdf["ai_reason_code"] = text.ai.classify(
     "COMPARABLE_SALES", "PROPERTY_CONDITION", "DATA_CORRECTION",
-    "CLASSIFICATION", "RENOVATION_TIMING", "INFORMATION_REQUEST")
-pdf["ai_follow_up"]  = text.ai.classify("urgent_follow_up", "standard_review")
+    "CLASSIFICATION", "RENOVATION_TIMING", "INFORMATION_REQUEST"
+)
+pdf["ai_follow_up"] = text.ai.classify("urgent_follow_up", "standard_review")
 pdf["enriched_at_utc"] = pd.Timestamp.utcnow().isoformat()
 
 enriched = spark.createDataFrame(pdf)
 (enriched.write.format("delta").mode("overwrite")
-    .option("overwriteSchema", "true").saveAsTable("fact_appeal_ai"))
-display(enriched[["appeal_id", "ai_sentiment", "ai_reason_code", "ai_follow_up", "ai_summary"]].head(10))</code></pre>
+    .option("overwriteSchema", "true").saveAsTable("dbo.fact_appeal_ai"))</code></pre>
 </div>
             <div class="callout tip">
                 <span class="callout-icon">✓</span>
@@ -101,22 +100,12 @@ display(enriched[["appeal_id", "ai_sentiment", "ai_reason_code", "ai_follow_up",
             <p>The seed data includes <code>ground_truth_sentiment</code> for technical evaluation. Compute enrichment success, sentiment accuracy, reason-code agreement, and a confusion matrix:</p>
 <div class="code-block">
 <span class="lang-badge">PySpark</span>
-<pre><code>from pyspark.sql import functions as F
+<pre><code>evaluation = (spark.table("dbo.fact_appeal_ai")
+    .withColumn("enrichment_success", F.col("ai_sentiment").isNotNull() &amp; F.col("ai_summary").isNotNull() &amp; F.col("ai_reason_code").isNotNull())
+    .withColumn("sentiment_match", F.coalesce(F.lower("ai_sentiment") == F.lower("ground_truth_sentiment"), F.lit(False)))
+    .withColumn("reason_match", F.coalesce(F.upper("ai_reason_code") == F.upper("reason_code"), F.lit(False))))
 
-evaluation = (
-    spark.table("fact_appeal_ai")
-    .withColumn("enrichment_success",
-                F.col("ai_sentiment").isNotNull() &amp; F.col("ai_summary").isNotNull() &amp; F.col("ai_reason_code").isNotNull())
-    .withColumn("sentiment_match",
-                F.coalesce(F.lower("ai_sentiment") == F.lower("ground_truth_sentiment"), F.lit(False)))
-    .withColumn("reason_match",
-                F.coalesce(F.upper("ai_reason_code") == F.upper("reason_code"), F.lit(False)))
-)
-
-# Confusion matrix by ground-truth vs predicted sentiment
-display(evaluation.groupBy("ground_truth_sentiment", "ai_sentiment")
-                  .count().orderBy("ground_truth_sentiment", "ai_sentiment"))
-
+display(evaluation.groupBy("ground_truth_sentiment", "ai_sentiment").count().orderBy("ground_truth_sentiment", "ai_sentiment"))
 display(evaluation.agg(
     F.count("*").alias("records"),
     F.avg(F.col("sentiment_match").cast("double")).alias("sentiment_accuracy"),
