@@ -27,7 +27,7 @@
         <h1>Build the Silver Layer</h1>
         <p class="lead">
             Bronze holds the raw source shapes; <strong>Silver</strong> makes them analytics-ready. Three notebooks
-            conform the mirrored SQL tables into typed dimensions and facts, flatten the Cosmos property
+            transform the mirrored SQL tables into typed dimensions and facts, flatten the Cosmos property
             documents, explode the nested inspection arrays, and ingest the ADLS appeals - writing managed Delta
             into a dedicated <code>SilverLakehouse</code>.
         </p>
@@ -37,7 +37,7 @@
         <h2>Learning Objectives</h2>
         <ul>
             <li>Create a <code>SilverLakehouse</code> and read the Bronze mirrors and shortcut cross-Lakehouse.</li>
-            <li>Conform casing and types for the shared keys (<code>parcelId</code>, <code>neighborhoodId</code>, <code>taxYear</code>, <code>propertyClassCode</code>).</li>
+            <li>Transform casing and types for the shared keys (<code>parcelId</code>, <code>neighborhoodId</code>, <code>taxYear</code>, <code>propertyClassCode</code>).</li>
             <li>Re-derive <code>assessed_value</code> (land + improvement) that mirroring may omit.</li>
             <li><strong>Flatten</strong> Cosmos property documents (including <code>longitude</code>/<code>latitude</code>) and <strong>explode</strong> the <code>inspections[]</code> array.</li>
             <li>Ingest the ADLS appeals into a typed <code>fact_appeal</code> (AI enrichment follows in Goal 3).</li>
@@ -66,7 +66,7 @@
         <h2>Notebook 1 - SQL Assessment to Silver</h2>
         <ol class="step-list">
             <li>
-                <h3 class="step-title">Conform every mirrored SQL table into Silver</h3>
+                <h3 class="step-title">Transform every mirrored SQL table into Silver</h3>
                 <div class="step-body">
                     <p>Snake-case every column, trim strings, enforce the business keys, and write one managed Delta table per source. The <code>Assessment</code> table re-derives <code>assessed_value</code> (mirroring may drop the computed column), and <code>TaxRate</code> becomes <code>fact_tax_rate</code> keeping its <code>municipal_rate</code>, <code>regional_rate</code>, and <code>education_rate</code> components (Gold combines them):</p>
 <div class="code-block">
@@ -190,7 +190,7 @@ for source_table, (target_table, source_keys) in table_map.items():
         <h2>Notebook 3 - ADLS Appeals to Silver (ingestion)</h2>
         <ol class="step-list">
             <li>
-                <h3 class="step-title">Conform the appeals into <code>fact_appeal</code></h3>
+                <h3 class="step-title">Transform the appeals into <code>fact_appeal</code></h3>
                 <div class="step-body">
                     <p>Import <strong>3 - ADLS Appeals to Silver and AI</strong> and run its <strong>ingestion cells now</strong> - the AI cells run in Goal 3. It resolves the Bronze Lakehouse, reads the appeal Parquet through the <code>appeals</code> shortcut, snake-cases and types the columns, keeps the raw <code>narrative</code> and <code>ground_truth_sentiment</code>, and writes <code>dbo.fact_appeal</code>:</p>
 <div class="code-block">
@@ -264,7 +264,7 @@ print(f"Conformed appeals: {appeals.count()}")</code></pre>
     <section id="validation">
         <h2>Validate Silver</h2>
         <div class="step-body">
-            <p>Confirm the conformed model joins end to end on the shared keys:</p>
+            <p>Confirm the transformed model joins end to end on the shared keys:</p>
 <div class="code-block">
 <span class="lang-badge">PySpark</span>
 <pre><code>display(spark.sql("""
@@ -286,7 +286,7 @@ print(f"Conformed appeals: {appeals.count()}")</code></pre>
 
     <section id="recap">
         <h2>What You Just Built</h2>
-        <p>A conformed Silver model - typed dimensions, assessment and sale facts, a <code>fact_tax_rate</code> reference, a flattened property profile with coordinates, an exploded inspection fact, and a typed <code>fact_appeal</code> - ready for AI enrichment (Goal 3) and the Gold marts that follow.</p>
+        <p>A transformed Silver model - typed dimensions, assessment and sale facts, a <code>fact_tax_rate</code> reference, a flattened property profile with coordinates, an exploded inspection fact, and a typed <code>fact_appeal</code> - ready for AI enrichment (Goal 3) and the Gold marts that follow.</p>
     </section>
 
     <section id="references">
