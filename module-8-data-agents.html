@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ontology-Grounded Data Agent - Property Assessment Lab</title>
+    <link rel="stylesheet" href="assets/css/data-lab.css" />
+    <script src="assets/js/print.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="brand">
+        <img class="ms-logo" src="assets/images/logo-msft.svg" alt="Microsoft" />
+        <div>
+            <div class="event-title">Property Assessment Data Lab</div>
+            <div class="event-subtitle">Sudsberry · Property Assessment on Microsoft Fabric</div>
+        </div>
+    </div>
+    <div class="module-pill">Goal 4 · Gold</div>
+</header>
+
+<div class="page-wrap">
+
+    <div class="module-hero">
+        <div class="module-eyebrow">Goal 4 · Gold</div>
+        <h1>Ground a Fabric Data Agent on the Ontology</h1>
+        <p class="lead">
+            The final step turns your ontology into a conversation. Ground the <strong>Property Assessment Agent</strong>
+            on <code>PropertyAssessmentOntology</code> as its <strong>only</strong> data source, so the evaluation proves
+            that entity and relationship grounding works - answers become graph traversals, not table joins.
+        </p>
+    </div>
+
+    <section id="objectives">
+        <h2>Learning Objectives</h2>
+        <ul>
+            <li>Create the <code>Property Assessment Agent</code> and add <code>PropertyAssessmentOntology</code> as its only source.</li>
+            <li>Apply the repo's grounding instructions, including the preview GQL guidance and AI-safety rules.</li>
+            <li>Evaluate the agent with relationship-aware questions and compare answers with the Gold tables.</li>
+        </ul>
+    </section>
+
+    <section id="anatomy">
+        <h2>Anatomy of an Ontology-Grounded Agent</h2>
+        <p>The recipe: grounding instructions + the ontology as the sole source + guardrails. Import <strong>5 - Property Assessment Data Agent Lab</strong> for grounding instructions and evaluation questions. Grounding on the ontology (rather than the raw marts) lets the agent traverse <code>locatedIn</code>, <code>recordsFor</code>, <code>submittedFor</code>, and <code>occursIn</code>.</p>
+
+        <div class="diagram">
+            <svg viewBox="0 0 900 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif" style="max-width:100%;">
+                <defs>
+                    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#605e5c"/></marker>
+                </defs>
+                <rect x="40"  y="70" width="200" height="60" rx="8" fill="#fff" stroke="#7c52e6" stroke-width="2"/>
+                <text x="140" y="95"  font-size="12" font-weight="600" text-anchor="middle" fill="#4f29a3">PropertyAssessmentOntology</text>
+                <text x="140" y="114" font-size="11" fill="#605e5c" text-anchor="middle">4 entities · 4 relationships</text>
+
+                <rect x="360" y="55" width="200" height="90" rx="10" fill="#ede4fb" stroke="#7c52e6" stroke-width="2"/>
+                <text x="460" y="90"  font-size="13" font-weight="700" fill="#4f29a3" text-anchor="middle">Property Assessment Agent</text>
+                <text x="460" y="112" font-size="11" fill="#605e5c" text-anchor="middle">plan · traverse · summarize</text>
+
+                <rect x="680" y="70" width="180" height="60" rx="8" fill="#fff" stroke="#605e5c"/>
+                <text x="770" y="95"  font-size="12" font-weight="600" text-anchor="middle">Grounded answer</text>
+                <text x="770" y="114" font-size="11" fill="#605e5c" text-anchor="middle">with lineage</text>
+
+                <line x1="240" y1="100" x2="360" y2="100" stroke="#605e5c" marker-end="url(#arrA)"/>
+                <line x1="560" y1="100" x2="680" y2="100" stroke="#605e5c" marker-end="url(#arrA)"/>
+            </svg>
+            <div class="caption">Figure 8.1 - The agent reasons through the ontology's entities and relationships to answer questions.</div>
+        </div>
+    </section>
+
+    <section id="step-1">
+        <h2>Step 1 - Create &amp; Ground the Agent <span class="pill ai">DATA AGENT</span></h2>
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Add the ontology as the only source</h3>
+                <div class="step-body">
+                    <p>Create or open <code>Property Assessment Agent</code>, select <strong>Add a data source</strong>, and add <code>PropertyAssessmentOntology</code>. Use the ontology as the agent's <strong>only</strong> source for this exercise so the evaluation proves entity and relationship grounding works.</p>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Add grounding instructions</h3>
+                <div class="step-body">
+                    <p>Add <code>Support group by in GQL</code> to the instructions - the current Microsoft-documented preview guidance for improving ontology aggregations. Retain the synthetic-data, measure-definition, and AI-safety instructions from notebook 5:</p>
+<div class="code-block">
+<span class="lang-badge">Instructions</span>
+<pre><code>You are the Sudsberry property assessment assistant. Answer only from the
+PropertyAssessmentOntology by reasoning through its entities and relationships.
+
+## Grounding
+- Support group by in GQL.
+- Traverse locatedIn, recordsFor, submittedFor, and occursIn to relate
+  properties, neighbourhoods, comparable sales, and appeals.
+
+## Rules and safety
+1. State that all values and taxes are synthetic.
+2. Distinguish assessed value from sale price - never conflate them.
+3. Do not present AI sentiment as an appeal decision; it is decision support.
+4. Say clearly when a question cannot be answered from the available data.</code></pre>
+</div>
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section id="step-2">
+        <h2>Step 2 - Test Relationship-Aware Questions</h2>
+        <div class="step-body">
+            <p>In the agent canvas, run the evaluation questions and confirm the agent traverses the graph:</p>
+            <ol>
+                <li>Which properties have both a comparable sale and an appeal?</li>
+                <li>Show appeals for properties whose assessment-to-sale ratio is above 1.1.</li>
+                <li>Which neighbourhood has the highest negative appeal sentiment rate?</li>
+                <li>For a selected parcel, show its neighbourhood, comparable sales, and appeals.</li>
+                <li>Which appealed properties also require inspection follow-up?</li>
+            </ol>
+            <div class="callout tip">
+                <span class="callout-icon">✓</span>
+                <div class="callout-content">
+                    Compare numeric results with the Gold tables and inspect the generated grounding. Do not accept an answer solely because it sounds plausible.
+                </div>
+            </div>
+        </div>
+
+    </section>
+
+    <section id="recap">
+        <h2>What You Just Built</h2>
+        <ul>
+            <li>An <strong>ontology-grounded Property Assessment Data Agent</strong> that traverses entities and relationships.</li>
+            <li>A conversation surface over the full Bronze &rarr; Silver &rarr; AI &rarr; Gold &rarr; ontology solution.</li>
+        </ul>
+        <div class="callout purple">
+            <span class="callout-icon">💡</span>
+            <div class="callout-content">
+                <strong>One traceable story.</strong> Select a neighbourhood or property class, spot a valuation or comparable-sales pattern, inspect associated appeal themes, traverse at least one ontology relationship, and explain the result through the report or the ontology-grounded agent - showing the source keys and transformations behind the answer.
+            </div>
+        </div>
+        <p>That completes the four goals. Head to the Closing for the recap and what to explore next.</p>
+    </section>
+
+    <section id="references">
+        <h2>References</h2>
+        <ul>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/iq/ontology/tutorial-4-create-data-agent" target="_blank" rel="noopener">Consume an ontology from a Fabric data agent</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/data-science/how-to-create-data-agent" target="_blank" rel="noopener">Create a Fabric Data Agent</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/data-science/data-agent-tenant-settings" target="_blank" rel="noopener">Configure Fabric data agent tenant settings</a></li>
+        </ul>
+    </section>
+
+    <nav class="module-nav">
+        <a class="nav-card" href="module-7-ontologies.html">
+            <div class="nav-direction">← Back</div>
+            <div class="nav-title">Fabric Ontology</div>
+        </a>
+        <a class="nav-card next" href="closing.html">
+            <div class="nav-direction">Next →</div>
+            <div class="nav-title">Closing</div>
+        </a>
+    </nav>
+
+</div>
+
+<footer class="site-footer">
+    <p><span class="footer-brand">Property Assessment Data Lab</span></p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Property Assessment Data Lab - Hands-On Lab</title>
+    <link rel="stylesheet" href="assets/css/data-lab.css" />
+    <script src="assets/js/print.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="brand">
+        <img class="ms-logo" src="assets/images/logo-msft.svg" alt="Microsoft" />
+        <div>
+            <div class="event-title">Property Assessment Data Lab</div>
+            <div class="event-subtitle">Sudsberry &middot; Build, Govern &amp; Serve with Microsoft Fabric</div>
+        </div>
+    </div>
+    <div class="module-pill">Goals</div>
+</header>
+
+<div class="cover">
+    <h1>Sudsberry:<br/>Build a Property Assessment Analytics &amp; AI Platform on Microsoft Fabric</h1>
+    <p class="cover-tagline">
+        Four goals take you from three operational sources through a Bronze &rarr; Silver &rarr; Gold medallion
+        to AI-enriched appeals and a grounded data agent on Microsoft Fabric. Each goal maps to one or more modules; pick a goal pill below
+        to focus the view, or keep <strong>All</strong> selected to see the full lab in order.
+    </p>
+
+    <section class="use-case">
+        <h2 class="use-case-heading">What is the Sudsberry lab?</h2>
+        <p class="use-case-lead">
+            You'll build an end-to-end analytics and AI solution for the fictional municipality of <strong>Sudsberry</strong>. It combines property valuation records, flexible inspection documents, and assessment appeal narratives into one governed Fabric workspace. <em>All records are synthetic</em> and do not represent real people, addresses, parcels, assessments, sales, or tax policy.
+        </p>
+        <div class="use-case-grid">
+            <div class="use-case-card">
+                <div class="uc-icon">🏠</div>
+                <h3 class="uc-title">Property valuation</h3>
+                <p class="uc-desc">Parcels, buildings, assessments, sales, tax rates, and reference data live in an <strong>Azure SQL</strong> relational system of record, mirrored into Fabric without moving data.</p>
+            </div>
+            <div class="use-case-card">
+                <div class="uc-icon">📋</div>
+                <h3 class="uc-title">Inspection documents</h3>
+                <p class="uc-desc">Flexible property profiles with nested inspection history live in <strong>Cosmos DB</strong> as JSON documents, mirrored into Fabric and flattened in Silver.</p>
+            </div>
+            <div class="use-case-card">
+                <div class="uc-icon">📝</div>
+                <h3 class="uc-title">Appeal narratives</h3>
+                <p class="uc-desc">Free-text assessment appeals land in <strong>ADLS Gen2</strong> as JSON/Parquet, reached through a OneLake shortcut and enriched with Fabric AI functions.</p>
+            </div>
+        </div>
+        <p class="use-case-summary">
+            Across the lab, you'll <strong>connect</strong> three sources into a Bronze Lakehouse, <strong>transform</strong> them into conformed Silver dimensions and facts, <strong>apply AI</strong> to appeal narratives, and <strong>build Gold marts</strong> with a Direct Lake semantic model, a report, a Fabric ontology, and an ontology-grounded Data Agent.
+        </p>
+    </section>
+
+    <div class="goals-section">
+        <h2 class="goals-heading">Lab Goals</h2>
+        <div class="goal-pills" role="tablist" aria-label="Filter modules by goal">
+            <button class="goal-pill active" type="button" data-goal="all"    aria-pressed="true">All</button>
+            <button class="goal-pill"        type="button" data-goal="bronze" aria-pressed="false"><span class="gp-num">Goal 1</span> Bronze · Connect</button>
+            <button class="goal-pill"        type="button" data-goal="silver" aria-pressed="false"><span class="gp-num">Goal 2</span> Silver · Transform</button>
+            <button class="goal-pill"        type="button" data-goal="ai"     aria-pressed="false"><span class="gp-num">Goal 3</span> AI · Appeals</button>
+            <button class="goal-pill"        type="button" data-goal="gold"   aria-pressed="false"><span class="gp-num">Goal 4</span> Gold · Serve</button>
+        </div>
+    </div>
+
+    <div class="module-grid">
+
+        <a class="module-card" data-goals="setup" href="module-0-setup.html">
+            <h3 class="mc-title">Get Started</h3>
+            <p class="mc-desc">
+                Welcome and workshop overview: sign in with your lab account, verify your workspace and
+                shared resource group, and find the GitHub repo and support links.
+            </p>
+            <div class="mc-goals"><span class="mc-goal-tag">Setup</span></div>
+        </a>
+
+        <a class="module-card" data-goals="setup" href="module-1-workspace-tour.html">
+            <h3 class="mc-title">Data Estate &amp; Solution Architecture</h3>
+            <p class="mc-desc">
+                Walk through the Sudsberry sources, the shared business keys, and the
+                Bronze &rarr; Silver &rarr; Gold medallion you'll build today.
+            </p>
+            <div class="mc-goals"><span class="mc-goal-tag">Setup</span></div>
+        </a>
+
+        <a class="module-card" data-goals="bronze" href="module-2-bronze-ingestion.html">
+            <h3 class="mc-title">Connect the Sources (Bronze)</h3>
+            <p class="mc-desc">
+                Build the Bronze layer without moving data - <strong>mirror</strong> Azure SQL (parcels,
+                assessments, sales) and Cosmos DB (property profiles), and <strong>shortcut</strong> the ADLS
+                appeal files into one <code>BronzeLakehouse</code>.
+            </p>
+            <div class="mc-goals"><span class="mc-goal-tag">Goal 1 · Bronze</span></div>
+        </a>
+
+        <a class="module-card" data-goals="silver" href="module-3-silver-transform.html">
+            <h3 class="mc-title">Build the Silver Layer</h3>
+            <p class="mc-desc">
+                Conform the mirrored SQL tables into typed dimensions and facts, flatten the Cosmos
+                property documents, and explode the nested inspection arrays into a
+                <code>SilverLakehouse</code> with two notebooks.
+            </p>
+            <div class="mc-goals"><span class="mc-goal-tag">Goal 2 · Silver</span></div>
+        </a>
+
+        <a class="module-card" data-goals="ai" href="module-4-ai-insights.html">
+            <h3 class="mc-title">AI on Appeal Narratives</h3>
+            <p class="mc-desc">
+                Load the ADLS appeals, then use Fabric's built-in <code>ai.*</code> functions to derive
+                sentiment, summaries, a reason classification, and a follow-up signal - and evaluate the results
+                against a ground-truth label.
+            </p>
+            <div class="mc-goals"><span class="mc-goal-tag">Goal 3 · AI</span></div>
+        </a>
+
+        <a class="module-card" data-goals="gold" href="module-5-gold-marts.html">
+            <h3 class="mc-title">Gold Business Marts</h3>
+            <p class="mc-desc">
+                Build joined analytical marts in the <code>GoldLakehouse</code> - property assessment,
+                comparable sales, appeal intelligence, and neighbourhood equity - ready for a semantic
+                model and a data agent.
+            </p>
+            <div class="mc-goals"><span class="mc-goal-tag">Goal 4 · Gold</span></div>
+        </a>
+
+        <a class="module-card" data-goals="gold" href="module-6-direct-lake.html">
+            <h3 class="mc-title">Direct Lake + Power BI</h3>
+            <p class="mc-desc">
+                Build a Direct Lake star-schema semantic model on the Gold marts and ship a
+                property-assessment report - no import refresh, no DirectQuery latency.
+            </p>
+            <div class="mc-goals"><span class="mc-goal-tag">Goal 4 · Gold</span></div>
+        </a>
+
+        <a class="module-card" data-goals="gold" href="module-7-ontologies.html">
+            <h3 class="mc-title">Fabric Ontology</h3>
+            <p class="mc-desc">
+                Build a governed semantic graph (<code>PropertyAssessmentOntology</code>) over your Gold marts. Define
+                Property, Neighborhood, ComparableSale, and Appeal entities and their relationships so the agent reasons
+                about concepts, not table joins.
+            </p>
+            <div class="mc-goals"><span class="mc-goal-tag">Goal 4 · Gold</span></div>
+        </a>
+
+        <a class="module-card" data-goals="gold" href="module-8-data-agents.html">
+            <h3 class="mc-title">Build a Fabric Data Agent</h3>
+            <p class="mc-desc">
+                Ground a property-assessment Data Agent on the <code>PropertyAssessmentOntology</code> and validate it in the
+                Fabric agent canvas with relationship-aware questions about valuations, sales, and appeals.
+            </p>
+            <div class="mc-goals"><span class="mc-goal-tag">Goal 4 · Gold</span></div>
+        </a>
+
+    </div>
+
+    <div style="margin-top: 64px; max-width: 1400px; width: 100%;">
+        <h2 style="text-align: center; border: none;">What You'll Build</h2>
+        <div class="diagram">
+            <object type="image/svg+xml" data="assets/images/architecture-overview.svg" style="width:100%;">
+                Architecture diagram
+            </object>
+            <div class="caption">
+                Figure 1 - Sudsberry end-to-end architecture: mirrored SQL + Cosmos and an ADLS shortcut into Bronze,
+                a Bronze &rarr; Silver &rarr; Gold medallion, AI-enriched appeals, a Direct Lake semantic model, and a Fabric Data Agent.
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top: 56px;">
+        <a class="module-card" style="display:inline-block; min-width:280px;" href="module-0-setup.html">
+            <span class="mc-number">START HERE →</span>
+            <h3 class="mc-title">Get Started</h3>
+            <p class="mc-desc">Sign in to Fabric, open your pre-provisioned workspace, then we begin.</p>
+        </a>
+    </div>
+</div>
+
+<footer class="site-footer">
+    <p><span class="footer-brand">Property Assessment Data Lab</span></p>
+    <p>Lab content aligned to the <a href="https://github.com/nickTinMicrosoft/fabric-hackathon-attendee-accessor">Fabric Property Assessment Hackathon repository</a> · Adapted for the Sudsberry Property Assessment Data Lab.</p>
+</footer>
+
+<script>
+(function() {
+    var pills = document.querySelectorAll('.goal-pill');
+    var cards = document.querySelectorAll('.module-card[data-goals]');
+    if (!pills.length || !cards.length) return;
+
+    function applyFilter(goal) {
+        cards.forEach(function(card) {
+            var tags = (card.getAttribute('data-goals') || '').split(/\s+/);
+            if (goal === 'all' || tags.indexOf(goal) !== -1) {
+                card.classList.remove('hidden-by-goal');
+            } else {
+                card.classList.add('hidden-by-goal');
+            }
+        });
+    }
+
+    pills.forEach(function(pill) {
+        pill.addEventListener('click', function() {
+            pills.forEach(function(p) {
+                p.classList.remove('active');
+                p.setAttribute('aria-pressed', 'false');
+            });
+            pill.classList.add('active');
+            pill.setAttribute('aria-pressed', 'true');
+            applyFilter(pill.getAttribute('data-goal'));
+        });
+    });
+})();
+</script>
+
+</body>
+</html>

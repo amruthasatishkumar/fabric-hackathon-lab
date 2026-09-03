@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gold Business Marts - Property Assessment Lab</title>
+    <link rel="stylesheet" href="assets/css/data-lab.css" />
+    <script src="assets/js/print.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="brand">
+        <img class="ms-logo" src="assets/images/logo-msft.svg" alt="Microsoft" />
+        <div>
+            <div class="event-title">Property Assessment Data Lab</div>
+            <div class="event-subtitle">Sudsberry · Property Assessment on Microsoft Fabric</div>
+        </div>
+    </div>
+    <div class="module-pill">Goal 4 · Gold</div>
+</header>
+
+<div class="page-wrap">
+
+    <div class="module-hero">
+        <div class="module-eyebrow">Goal 4 · Gold</div>
+        <h1>Gold Business Marts</h1>
+        <p class="lead">
+            <strong>Gold</strong> is the business-ready layer. A notebook combines the Silver dimensions, facts,
+            and AI-enriched appeals into four reusable marts in a <code>GoldLakehouse</code> - ready for a Direct
+            Lake semantic model, a report, and a data agent.
+        </p>
+    </div>
+
+    <section id="objectives">
+        <h2>Learning Objectives</h2>
+        <ul>
+            <li>Create a <code>GoldLakehouse</code> with Lakehouse schemas enabled (marts land in <code>dbo</code>).</li>
+            <li>Build <code>property_assessment_mart</code> - latest assessed value and estimated tax per property.</li>
+            <li>Build <code>comparable_sales_mart</code> - assessment-to-sale ratios on arm's-length sales.</li>
+            <li>Build <code>appeal_intelligence_mart</code> - appeal lifecycle plus AI signals.</li>
+            <li>Build <code>neighborhood_equity_mart</code> - valuation, sales-ratio, and appeal aggregates by neighbourhood.</li>
+        </ul>
+    </section>
+
+    <section id="setup">
+        <h2>Set Up the Gold Lakehouse &amp; Notebook</h2>
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Create <code>GoldLakehouse</code> with schemas enabled</h3>
+                <div class="step-body">
+                    <p>Click <strong>+ New item</strong> &rarr; <strong>Lakehouse</strong> &rarr; name it <code>GoldLakehouse</code> and enable <strong>Lakehouse schemas</strong> so the marts are written to the <code>dbo</code> schema.</p>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Import the Gold notebook</h3>
+                <div class="step-body">
+                    <p>Import <strong>4 - Property Assessment Gold Marts</strong>. Set <code>GoldLakehouse</code> as the default and add <code>SilverLakehouse</code> as a source.</p>
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section id="mart-1">
+        <h2>property_assessment_mart</h2>
+        <p><em>What is the latest assessed value and estimated tax for each property?</em></p>
+<div class="code-block">
+<span class="lang-badge">Spark SQL</span>
+<pre><code>%%sql
+CREATE OR REPLACE TABLE dbo.property_assessment_mart AS
+WITH latest_assessment AS (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY parcel_id ORDER BY tax_year DESC) AS recency_rank
+    FROM SilverLakehouse.fact_assessment
+), primary_building AS (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY parcel_id ORDER BY floor_area_square_metres DESC, building_id) AS building_rank
+    FROM SilverLakehouse.dim_building
+), latest_inspection AS (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY parcel_id ORDER BY inspection_date DESC) AS recency_rank
+    FROM SilverLakehouse.fact_inspection
+)
+SELECT
+    p.parcel_id, p.parcel_number, p.synthetic_address, p.neighborhood_id,
+    n.neighborhood_name, n.market_area, p.property_class_code,
+    pc.property_class_name, p.lot_area_square_metres, p.zoning_code,
+    b.building_type, b.year_built, b.floor_area_square_metres, b.condition_code,
+    a.tax_year, a.land_value, a.improvement_value, a.assessed_value,
+    a.confidence_score,
+    r.municipal_rate + r.regional_rate + r.education_rate AS combined_rate,
+    a.assessed_value * (r.municipal_rate + r.regional_rate + r.education_rate) AS estimated_tax,
+    pp.longitude, pp.latitude,
+    i.inspection_date AS latest_inspection_date,
+    i.condition       AS latest_inspection_condition,
+    i.follow_up_required
+FROM SilverLakehouse.dim_parcel p
+JOIN SilverLakehouse.dim_neighborhood   n  ON n.neighborhood_id = p.neighborhood_id
+JOIN SilverLakehouse.dim_property_class pc ON pc.property_class_code = p.property_class_code
+LEFT JOIN primary_building b ON b.parcel_id = p.parcel_id AND b.building_rank = 1
+JOIN latest_assessment a ON a.parcel_id = p.parcel_id AND a.recency_rank = 1
+JOIN SilverLakehouse.fact_tax_rate r ON r.tax_year = a.tax_year
+                                     AND r.property_class_code = p.property_class_code
+LEFT JOIN SilverLakehouse.property_profile pp ON pp.parcel_id = p.parcel_id
+LEFT JOIN latest_inspection i ON i.parcel_id = p.parcel_id AND i.recency_rank = 1;</code></pre>
+</div>
+    </section>
+
+    <section id="mart-2">
+        <h2>comparable_sales_mart</h2>
+        <p><em>Which assessments differ materially from arm's-length sale values?</em></p>
+<div class="code-block">
+<span class="lang-badge">Spark SQL</span>
+<pre><code>%%sql
+CREATE OR REPLACE TABLE dbo.comparable_sales_mart AS
+WITH sale_assessment AS (
+    SELECT
+        s.sale_id, s.parcel_id, s.sale_date, s.sale_price, s.sale_type, s.is_arms_length,
+        p.neighborhood_id, p.property_class_code, a.tax_year AS assessment_tax_year,
+        a.assessed_value,
+        ROW_NUMBER() OVER (
+            PARTITION BY s.sale_id
+            ORDER BY ABS(a.tax_year - YEAR(s.sale_date)), a.tax_year DESC
+        ) AS year_match_rank
+    FROM SilverLakehouse.fact_sale s
+    JOIN SilverLakehouse.dim_parcel      p ON p.parcel_id = s.parcel_id
+    JOIN SilverLakehouse.fact_assessment a ON a.parcel_id = s.parcel_id
+    WHERE s.is_arms_length = true
+)
+SELECT
+    sale_id, parcel_id, sale_date, sale_price, sale_type, is_arms_length,
+    neighborhood_id, property_class_code, assessment_tax_year, assessed_value,
+    assessed_value / NULLIF(sale_price, 0) AS assessment_to_sale_ratio
+FROM sale_assessment
+WHERE year_match_rank = 1;</code></pre>
+</div>
+    </section>
+
+    <section id="mart-3">
+        <h2>appeal_intelligence_mart</h2>
+        <p><em>What drives appeals, and where are urgent or negative narratives concentrated?</em></p>
+<div class="code-block">
+<span class="lang-badge">Spark SQL</span>
+<pre><code>%%sql
+-- appeal_ai_source_table = fact_appeal_ai (built-in) or fact_appeal_foundry_ai (Foundry, notebook 3a)
+CREATE OR REPLACE TABLE dbo.appeal_intelligence_mart AS
+SELECT
+    a.*, n.neighborhood_name, n.market_area, p.property_class_code,
+    pc.property_class_name, ass.assessed_value,
+    ass.assessed_value * (r.municipal_rate + r.regional_rate + r.education_rate) AS estimated_tax,
+    CASE WHEN lower(a.ai_follow_up) = 'urgent_follow_up' THEN true ELSE false END AS urgent_follow_up
+FROM SilverLakehouse.fact_appeal_ai a
+JOIN SilverLakehouse.dim_parcel         p   ON p.parcel_id = a.parcel_id
+JOIN SilverLakehouse.dim_neighborhood   n   ON n.neighborhood_id = p.neighborhood_id
+JOIN SilverLakehouse.dim_property_class pc  ON pc.property_class_code = p.property_class_code
+JOIN SilverLakehouse.fact_assessment    ass ON ass.parcel_id = a.parcel_id AND ass.tax_year = a.tax_year
+JOIN SilverLakehouse.fact_tax_rate      r   ON r.tax_year = ass.tax_year
+                                            AND r.property_class_code = p.property_class_code;</code></pre>
+</div>
+    </section>
+
+    <section id="mart-4">
+        <h2>neighborhood_equity_mart</h2>
+        <p><em>Which neighbourhoods show unusual sales ratios, valuation changes, or appeal rates?</em></p>
+<div class="code-block">
+<span class="lang-badge">Spark SQL</span>
+<pre><code>%%sql
+CREATE OR REPLACE TABLE dbo.neighborhood_equity_mart AS
+WITH property_summary AS (
+    SELECT neighborhood_id, neighborhood_name, market_area,
+        COUNT(DISTINCT parcel_id) AS parcel_count,
+        AVG(assessed_value)       AS average_assessed_value,
+        SUM(estimated_tax)        AS estimated_tax_total
+    FROM dbo.property_assessment_mart
+    GROUP BY neighborhood_id, neighborhood_name, market_area
+), sales_summary AS (
+    SELECT neighborhood_id, AVG(assessment_to_sale_ratio) AS average_assessment_to_sale_ratio
+    FROM dbo.comparable_sales_mart
+    GROUP BY neighborhood_id
+), appeal_summary AS (
+    SELECT neighborhood_id,
+        COUNT(DISTINCT appeal_id) AS appeal_count,
+        COUNT(DISTINCT parcel_id) AS appealed_parcel_count,
+        AVG(CASE WHEN lower(ai_sentiment) = 'negative' THEN 1.0 ELSE 0.0 END) AS negative_sentiment_rate,
+        AVG(requested_adjustment_pct) AS average_requested_adjustment_pct
+    FROM dbo.appeal_intelligence_mart
+    GROUP BY neighborhood_id
+)
+SELECT p.*,
+    s.average_assessment_to_sale_ratio,
+    COALESCE(a.appeal_count, 0)           AS appeal_count,
+    COALESCE(a.appealed_parcel_count, 0)  AS appealed_parcel_count,
+    COALESCE(a.appealed_parcel_count, 0) / NULLIF(p.parcel_count, 0) AS appeal_rate,
+    a.negative_sentiment_rate,
+    a.average_requested_adjustment_pct
+FROM property_summary p
+LEFT JOIN sales_summary  s ON s.neighborhood_id = p.neighborhood_id
+LEFT JOIN appeal_summary a ON a.neighborhood_id = p.neighborhood_id;</code></pre>
+</div>
+
+    </section>
+
+    <section id="recap">
+        <h2>What You Just Built</h2>
+        <p>Four business marts that answer real assessment questions. Goal 4 continues with a Direct Lake semantic model, a Fabric ontology, and a Data Agent grounded on them.</p>
+    </section>
+
+    <section id="references">
+        <h2>References</h2>
+        <ul>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/onelake/onelake-medallion-lakehouse-architecture" target="_blank" rel="noopener">Implement medallion lakehouse architecture in Fabric</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/data-engineering/lakehouse-overview" target="_blank" rel="noopener">Lakehouse in Microsoft Fabric</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/power-bi/guidance/star-schema" target="_blank" rel="noopener">Star schema guidance</a></li>
+        </ul>
+    </section>
+
+    <nav class="module-nav">
+        <a class="nav-card" href="module-4-ai-insights.html">
+            <div class="nav-direction">← Back</div>
+            <div class="nav-title">AI on Appeal Narratives</div>
+        </a>
+        <a class="nav-card next" href="module-6-direct-lake.html">
+            <div class="nav-direction">Next →</div>
+            <div class="nav-title">Direct Lake + Power BI</div>
+        </a>
+    </nav>
+
+</div>
+
+<footer class="site-footer">
+    <p><span class="footer-brand">Property Assessment Data Lab</span></p>
+</footer>
+
+</body>
+</html>

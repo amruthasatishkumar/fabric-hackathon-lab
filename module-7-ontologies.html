@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Model a Fabric Ontology - Property Assessment Lab</title>
+    <link rel="stylesheet" href="assets/css/data-lab.css" />
+    <script src="assets/js/print.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="brand">
+        <img class="ms-logo" src="assets/images/logo-msft.svg" alt="Microsoft" />
+        <div>
+            <div class="event-title">Property Assessment Data Lab</div>
+            <div class="event-subtitle">Sudsberry · Property Assessment on Microsoft Fabric</div>
+        </div>
+    </div>
+    <div class="module-pill">Goal 4 · Gold</div>
+</header>
+
+<div class="page-wrap">
+
+    <div class="module-hero">
+        <div class="module-eyebrow">Goal 4 · Gold</div>
+        <h1>Model a Fabric Ontology</h1>
+        <p class="lead">
+            Create a governed business vocabulary over the Gold marts before configuring the data agent. The
+            <strong>ontology</strong> makes properties, neighbourhoods, sales, and appeals explicit business concepts and
+            turns their shared keys into <strong>traversable relationships</strong> the agent can reason over.
+        </p>
+    </div>
+
+    <div class="callout warning">
+        <span class="callout-icon">⚠</span>
+        <div class="callout-content">
+            <strong>Preview prerequisites.</strong> Fabric Ontology is a preview capability in the Fabric IQ workload. Your tenant admin must enable the <strong>Ontology item (preview)</strong> setting, and the <strong>Fabric data agent</strong> tenant settings must be enabled before the data agent step. Complete <strong>notebook 4</strong> first so all four managed Gold Delta tables exist.
+        </div>
+    </div>
+
+    <section id="objectives">
+        <h2>Learning Objectives</h2>
+        <ul>
+            <li>Create a <code>PropertyAssessmentOntology</code> item bound <strong>directly from OneLake Gold</strong>.</li>
+            <li>Define and bind four entity types (<code>Property</code>, <code>Neighborhood</code>, <code>ComparableSale</code>, <code>Appeal</code>).</li>
+            <li>Create four directional relationships across the shared keys.</li>
+            <li>Refresh and validate the graph so entity and relationship grounding works.</li>
+        </ul>
+    </section>
+
+    <section id="step-1">
+        <h2>Step 1 - Create the Ontology <span class="pill ai">ONTOLOGY</span></h2>
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Create the item from OneLake</h3>
+                <div class="step-body">
+                    <p>In the Fabric workspace, select <strong>New item</strong> &rarr; <strong>Ontology</strong>. Name it <code>PropertyAssessmentOntology</code> - ontology item names support letters, numbers, and underscores; no spaces or dashes.</p>
+                    <p>Choose to build <strong>directly from OneLake</strong>. <em>Do not</em> generate the ontology from the semantic model.</p>
+                    <div class="callout info">
+                        <span class="callout-icon">ⓘ</span>
+                        <div class="callout-content">
+                            Direct OneLake binding is intentional. It exposes the entity keys, property bindings, and relationship mappings that an automatically generated model would hide from the exercise.
+                        </div>
+                    </div>
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section id="step-2">
+        <h2>Step 2 - Create &amp; Bind Entity Types</h2>
+        <p>For each entity, select <strong>Bind data</strong>, browse to <code>GoldLakehouse</code>, choose the table in the <code>dbo</code> schema, map the listed properties, define the entity key, and set the display property. Keep the source columns unchanged.</p>
+
+        <h3>Property <span class="pill lakehouse">dbo.property_assessment_mart</span></h3>
+        <table>
+            <thead><tr><th>Source column</th><th>Ontology property</th><th>Use</th></tr></thead>
+            <tbody>
+                <tr><td><code>parcel_id</code></td><td><code>PropertyId</code></td><td><strong>Entity key</strong></td></tr>
+                <tr><td><code>parcel_number</code></td><td><code>PropertyNumber</code></td><td>Display property</td></tr>
+                <tr><td><code>synthetic_address</code></td><td><code>PropertyAddress</code></td><td>Location label</td></tr>
+                <tr><td><code>neighborhood_id</code></td><td><code>PropertyNeighborhoodId</code></td><td>Relationship key</td></tr>
+                <tr><td><code>neighborhood_name</code></td><td><code>PropertyNeighborhoodName</code></td><td>Context</td></tr>
+                <tr><td><code>property_class_code</code> / <code>property_class_name</code></td><td><code>PropertyClassCode</code> / <code>PropertyClassName</code></td><td>Classification</td></tr>
+                <tr><td><code>building_type</code> / <code>condition_code</code></td><td><code>PropertyBuildingType</code> / <code>PropertyCondition</code></td><td>Building</td></tr>
+                <tr><td><code>tax_year</code> / <code>assessed_value</code> / <code>estimated_tax</code></td><td><code>PropertyTaxYear</code> / <code>PropertyAssessedValue</code> / <code>PropertyEstimatedTax</code></td><td>Assessment</td></tr>
+                <tr><td><code>latest_inspection_date</code> / <code>follow_up_required</code></td><td><code>PropertyInspectionDate</code> / <code>PropertyFollowUpRequired</code></td><td>Inspection signal</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Neighborhood <span class="pill lakehouse">dbo.neighborhood_equity_mart</span></h3>
+        <table>
+            <thead><tr><th>Source column</th><th>Ontology property</th><th>Use</th></tr></thead>
+            <tbody>
+                <tr><td><code>neighborhood_id</code></td><td><code>NeighborhoodId</code></td><td><strong>Entity key</strong></td></tr>
+                <tr><td><code>neighborhood_name</code></td><td><code>NeighborhoodName</code></td><td>Display property</td></tr>
+                <tr><td><code>market_area</code></td><td><code>NeighborhoodMarketArea</code></td><td>Market grouping</td></tr>
+                <tr><td><code>parcel_count</code> / <code>average_assessed_value</code> / <code>estimated_tax_total</code></td><td><code>NeighborhoodParcelCount</code> / <code>NeighborhoodAvgValue</code> / <code>NeighborhoodTaxTotal</code></td><td>Valuation</td></tr>
+                <tr><td><code>average_assessment_to_sale_ratio</code></td><td><code>NeighborhoodSaleRatio</code></td><td>Assessment-to-sale signal</td></tr>
+                <tr><td><code>appeal_count</code> / <code>appeal_rate</code> / <code>negative_sentiment_rate</code></td><td><code>NeighborhoodAppealCount</code> / <code>NeighborhoodAppealRate</code> / <code>NeighborhoodNegativeRate</code></td><td>Appeal + AI signal</td></tr>
+            </tbody>
+        </table>
+
+        <h3>ComparableSale <span class="pill lakehouse">dbo.comparable_sales_mart</span></h3>
+        <table>
+            <thead><tr><th>Source column</th><th>Ontology property</th><th>Use</th></tr></thead>
+            <tbody>
+                <tr><td><code>sale_id</code></td><td><code>SaleId</code></td><td><strong>Entity key</strong></td></tr>
+                <tr><td><code>parcel_id</code></td><td><code>SalePropertyId</code></td><td>Relationship key</td></tr>
+                <tr><td><code>sale_date</code> / <code>sale_price</code> / <code>sale_type</code></td><td><code>SaleDate</code> / <code>SalePrice</code> / <code>SaleType</code></td><td>Transaction</td></tr>
+                <tr><td><code>assessment_tax_year</code> / <code>assessed_value</code> / <code>assessment_to_sale_ratio</code></td><td><code>SaleAssessmentYear</code> / <code>SaleAssessedValue</code> / <code>SaleAssessmentRatio</code></td><td>Comparison signal</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Appeal <span class="pill lakehouse">dbo.appeal_intelligence_mart</span></h3>
+        <table>
+            <thead><tr><th>Source column</th><th>Ontology property</th><th>Use</th></tr></thead>
+            <tbody>
+                <tr><td><code>appeal_id</code></td><td><code>AppealId</code></td><td><strong>Entity key</strong> + display</td></tr>
+                <tr><td><code>parcel_id</code> / <code>neighborhood_id</code></td><td><code>AppealPropertyId</code> / <code>AppealNeighborhoodId</code></td><td>Relationship keys</td></tr>
+                <tr><td><code>tax_year</code> / <code>submitted_date</code> / <code>reason_code</code></td><td><code>AppealTaxYear</code> / <code>AppealSubmittedDate</code> / <code>AppealReasonCode</code></td><td>Submission</td></tr>
+                <tr><td><code>status</code> / <code>outcome</code> / <code>requested_adjustment_pct</code></td><td><code>AppealStatus</code> / <code>AppealOutcome</code> / <code>AppealRequestedPct</code></td><td>Lifecycle</td></tr>
+                <tr><td><code>ai_sentiment</code> / <code>ai_summary</code> / <code>ai_reason_code</code></td><td><code>AppealAISentiment</code> / <code>AppealAISummary</code> / <code>AppealAIReasonCode</code></td><td>AI-derived</td></tr>
+                <tr><td><code>ai_follow_up</code> / <code>urgent_follow_up</code></td><td><code>AppealAIFollowUp</code> / <code>AppealUrgentFollowUp</code></td><td>Follow-up signal</td></tr>
+            </tbody>
+        </table>
+
+        <div class="callout tip">
+            <span class="callout-icon">✓</span>
+            <div class="callout-content">
+                <strong>Do not bind the original <code>narrative</code> column.</strong> The ontology and agent should use the governed AI-derived summary and labels rather than raw appeal narratives. Ontology property names are globally distinct and no longer than 26 characters.
+            </div>
+        </div>
+    </section>
+
+    <section id="step-3">
+        <h2>Step 3 - Create Relationship Types</h2>
+        <p>Create each directional relationship, choose the mapping table, and map the origin and target keys exactly as shown. The Gold mapping tables contain both keys on every relationship row.</p>
+        <table>
+            <thead><tr><th>Relationship</th><th>Origin → Target</th><th>Mapping table</th><th>Origin key</th><th>Target key</th></tr></thead>
+            <tbody>
+                <tr><td><code>locatedIn</code></td><td>Property → Neighborhood</td><td><code>property_assessment_mart</code></td><td><code>parcel_id</code></td><td><code>neighborhood_id</code></td></tr>
+                <tr><td><code>recordsFor</code></td><td>ComparableSale → Property</td><td><code>comparable_sales_mart</code></td><td><code>sale_id</code></td><td><code>parcel_id</code></td></tr>
+                <tr><td><code>submittedFor</code></td><td>Appeal → Property</td><td><code>appeal_intelligence_mart</code></td><td><code>appeal_id</code></td><td><code>parcel_id</code></td></tr>
+                <tr><td><code>occursIn</code></td><td>Appeal → Neighborhood</td><td><code>appeal_intelligence_mart</code></td><td><code>appeal_id</code></td><td><code>neighborhood_id</code></td></tr>
+            </tbody>
+        </table>
+        <p>Save each relationship and confirm it appears on the ontology canvas.</p>
+    </section>
+
+    <section id="step-4">
+        <h2>Step 4 - Refresh &amp; Validate the Graph</h2>
+        <p>Refresh the graph model after saving all bindings - upstream Lakehouse changes aren't visible in the ontology until the graph is refreshed, then confirm each entity type is populated and its relationships traverse correctly.</p>
+        <div class="callout info">
+            <span class="callout-icon">ⓘ</span>
+            <div class="callout-content">
+                If numeric values appear null, verify the source types in the binding. Ontology and Graph are preview features; keep authoritative decimal values in Gold and use a <code>double</code>-typed ontology projection only if the tenant can't bind a required decimal property.
+            </div>
+        </div>
+    </section>
+
+    <section id="constraints">
+        <h2>Current Preview Constraints</h2>
+        <ul>
+            <li>Ontology must be enabled at the tenant level and requires Fabric capacity.</li>
+            <li>The Fabric data agent and its Copilot tenant settings must be enabled separately.</li>
+            <li>Bound Lakehouse tables must be managed tables, must not use OneLake security, and must not have Delta column mapping enabled.</li>
+            <li>Source changes require a graph refresh.</li>
+            <li>Ontology and agent behaviour can change while these features are in preview.</li>
+        </ul>
+    </section>
+
+    <section id="recap">
+        <h2>What You Just Built</h2>
+        <p>A validated semantic graph over the Gold marts - four entities, four relationships, Property as the anchor. Next, a Fabric Data Agent is grounded on <code>PropertyAssessmentOntology</code> so questions become relationship traversals.</p>
+    </section>
+
+    <section id="references">
+        <h2>References</h2>
+        <ul>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/iq/ontology/overview" target="_blank" rel="noopener">What is Ontology?</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/iq/ontology/how-to-bind-data" target="_blank" rel="noopener">Bind data</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/iq/ontology/how-to-create-relationship-types" target="_blank" rel="noopener">Add relationship types</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/iq/ontology/tutorial-4-create-data-agent" target="_blank" rel="noopener">Consume ontology from a Fabric data agent</a></li>
+        </ul>
+    </section>
+
+    <nav class="module-nav">
+        <a class="nav-card" href="module-6-direct-lake.html">
+            <div class="nav-direction">← Back</div>
+            <div class="nav-title">Direct Lake + Power BI</div>
+        </a>
+        <a class="nav-card next" href="module-8-data-agents.html">
+            <div class="nav-direction">Next →</div>
+            <div class="nav-title">Fabric Data Agent</div>
+        </a>
+    </nav>
+
+</div>
+
+<footer class="site-footer">
+    <p><span class="footer-brand">Property Assessment Data Lab</span></p>
+</footer>
+
+</body>
+</html>

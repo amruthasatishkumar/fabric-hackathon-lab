@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connect the Sources (Bronze) - Property Assessment Lab</title>
+    <link rel="stylesheet" href="assets/css/data-lab.css" />
+    <script src="assets/js/print.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="brand">
+        <img class="ms-logo" src="assets/images/logo-msft.svg" alt="Microsoft" />
+        <div>
+            <div class="event-title">Property Assessment Data Lab</div>
+            <div class="event-subtitle">Sudsberry · Property Assessment on Microsoft Fabric</div>
+        </div>
+    </div>
+    <div class="module-pill">Goal 1 · Bronze</div>
+</header>
+
+<div class="page-wrap">
+
+    <div class="module-hero">
+        <div class="module-eyebrow">Goal 1 · Bronze</div>
+        <h1>Connect the Sources (Bronze)</h1>
+        <p class="lead">
+            The Bronze layer makes all three Sudsberry sources readable in Fabric <strong>without moving or copying
+            data out of them</strong>. You'll <strong>mirror</strong> the Azure SQL assessment database and the
+            Cosmos DB property profiles into OneLake, and create a OneLake <strong>shortcut</strong> to the ADLS Gen2
+            appeal files - all surfaced through a single <code>BronzeLakehouse</code>.
+        </p>
+    </div>
+
+    <section id="objectives">
+        <h2>Learning Objectives</h2>
+        <ul>
+            <li><strong>Mirror</strong> the Azure SQL assessment database (parcels, assessments, sales, and reference tables).</li>
+            <li><strong>Mirror</strong> the Cosmos DB <code>properties</code> container (property profiles + nested inspections).</li>
+            <li>Create a <code>BronzeLakehouse</code> and a OneLake <strong>shortcut</strong> to the ADLS appeal path.</li>
+            <li>Validate that all three sources are readable in Fabric.</li>
+            <li>Record the actual Fabric item names - the Silver notebooks expose them as editable parameters.</li>
+        </ul>
+    </section>
+
+    <section id="why">
+        <h2>Why Mirror + Shortcut?</h2>
+        <p>Mirroring continuously replicates operational databases into OneLake as Delta with no ETL pipelines, and shortcuts expose file data in place with zero copy. Sudsberry keeps its systems of record where they are; Fabric reads them on OneLake. No source server or storage names are ever embedded in your notebooks.</p>
+
+        <div class="diagram">
+            <svg viewBox="0 0 1000 280" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif" style="max-width:100%;">
+                <defs>
+                    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#605e5c"/></marker>
+                    <linearGradient id="tealbox" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e1f3fa"/><stop offset="1" stop-color="#cfeaf6"/></linearGradient>
+                </defs>
+
+                <rect x="20"  y="30"  width="210" height="56" rx="8" fill="#fff" stroke="#605e5c"/>
+                <text x="125" y="53"  font-size="12" font-weight="600" text-anchor="middle">🗄 Azure SQL</text>
+                <text x="125" y="72"  font-size="11" fill="#605e5c" text-anchor="middle">assessments · sales</text>
+
+                <rect x="20"  y="112" width="210" height="56" rx="8" fill="#fff" stroke="#605e5c"/>
+                <text x="125" y="135" font-size="12" font-weight="600" text-anchor="middle">🌐 Cosmos DB</text>
+                <text x="125" y="154" font-size="11" fill="#605e5c" text-anchor="middle">property profiles</text>
+
+                <rect x="20"  y="194" width="210" height="56" rx="8" fill="#fff" stroke="#605e5c"/>
+                <text x="125" y="217" font-size="12" font-weight="600" text-anchor="middle">📁 ADLS Gen2</text>
+                <text x="125" y="236" font-size="11" fill="#605e5c" text-anchor="middle">appeal json + parquet</text>
+
+                <rect x="300" y="30"  width="210" height="56" rx="8" fill="#e1f3fa" stroke="#0078d4"/>
+                <text x="405" y="53"  font-size="12" font-weight="700" fill="#005a9e" text-anchor="middle">MIRROR</text>
+                <text x="405" y="72"  font-size="10" fill="#605e5c" text-anchor="middle">CDC into managed Delta</text>
+
+                <rect x="300" y="112" width="210" height="56" rx="8" fill="#e1f3fa" stroke="#0078d4"/>
+                <text x="405" y="135" font-size="12" font-weight="700" fill="#005a9e" text-anchor="middle">MIRROR</text>
+                <text x="405" y="154" font-size="10" fill="#605e5c" text-anchor="middle">change feed into Delta</text>
+
+                <rect x="300" y="194" width="210" height="56" rx="8" fill="#ede4fb" stroke="#7c52e6"/>
+                <text x="405" y="217" font-size="12" font-weight="700" fill="#4f29a3" text-anchor="middle">SHORTCUT</text>
+                <text x="405" y="236" font-size="10" fill="#605e5c" text-anchor="middle">zero-copy file access</text>
+
+                <line x1="230" y1="58"  x2="300" y2="58"  stroke="#605e5c" marker-end="url(#arr2)"/>
+                <line x1="230" y1="140" x2="300" y2="140" stroke="#605e5c" marker-end="url(#arr2)"/>
+                <line x1="230" y1="222" x2="300" y2="222" stroke="#605e5c" marker-end="url(#arr2)"/>
+
+                <rect x="620" y="95" width="220" height="90" rx="10" fill="url(#tealbox)" stroke="#0078d4" stroke-width="2"/>
+                <text x="730" y="125" font-size="14" font-weight="700" fill="#005a9e" text-anchor="middle">BronzeLakehouse</text>
+                <text x="730" y="147" font-size="11" fill="#605e5c" text-anchor="middle">OneLake · one SQL endpoint</text>
+                <text x="730" y="166" font-size="11" fill="#605e5c" text-anchor="middle">mirrors + appeals shortcut</text>
+
+                <line x1="510" y1="58"  x2="620" y2="120" stroke="#605e5c" marker-end="url(#arr2)"/>
+                <line x1="510" y1="140" x2="620" y2="140" stroke="#605e5c" marker-end="url(#arr2)"/>
+                <line x1="510" y1="222" x2="620" y2="160" stroke="#605e5c" marker-end="url(#arr2)"/>
+            </svg>
+            <div class="caption">Figure 2.1 - Two mirrors and one shortcut converge on a single Bronze Lakehouse.</div>
+        </div>
+
+        <div class="callout warning">
+            <span class="callout-icon">⚠</span>
+            <div class="callout-content">
+                Obtain connection details and credentials from your facilitator. <strong>Do not paste credentials into a notebook or commit them anywhere.</strong>
+            </div>
+        </div>
+    </section>
+
+    <section id="part-a">
+        <h2>Part A - Mirror Azure SQL <span class="pill lakehouse">MIRROR</span></h2>
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Create a Mirrored Azure SQL Database</h3>
+                <div class="step-body">
+                    <p>In your workspace, click <strong>+ New item</strong> &rarr; search "Mirrored" &rarr; <strong>Mirrored Azure SQL Database</strong>. Name it <code>Property Assessment SQL Mirror</code> and enter the connection details supplied for your lab (see <a href="module-0-setup.html" target="_blank">Get Started</a>).</p>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Select the assessment tables</h3>
+                <div class="step-body">
+                    <p>Choose the tables and begin mirroring. Confirm all eight appear:</p>
+                    <p><code>Jurisdiction</code>, <code>Neighborhood</code>, <code>PropertyClass</code>, <code>Parcel</code>, <code>Building</code>, <code>Assessment</code>, <code>Sale</code>, <code>TaxRate</code>.</p>
+                    <div class="callout tip">
+                        <span class="callout-icon">✓</span>
+                        <div class="callout-content">
+                            <strong>Computed columns:</strong> SQL mirroring may omit the computed <code>AssessedValue</code>. That's fine - you'll re-derive Land + Improvement value in Silver.
+                        </div>
+                    </div>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Watch replication reach a steady state</h3>
+                <div class="step-body">
+                    <p>The mirror snapshots first, then switches to incremental change data capture. Wait for the tables to report <strong>Replicated</strong>.</p>
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section id="part-b">
+        <h2>Part B - Mirror Cosmos DB <span class="pill lakehouse">MIRROR</span></h2>
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Create a Mirrored Azure Cosmos DB item</h3>
+                <div class="step-body">
+                    <p>Click <strong>+ New item</strong> &rarr; <strong>Mirrored Azure Cosmos DB</strong>. Name it <code>Property Profiles Mirror</code> and connect to the account provided by the facilitator.</p>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Select the properties container</h3>
+                <div class="step-body">
+                    <p>Choose the database and the <code>properties</code> container. Confirm that property-profile fields and the nested <code>inspections</code> data are visible.</p>
+                    <div class="callout info">
+                        <span class="callout-icon">ⓘ</span>
+                        <div class="callout-content">
+                            Each document's <code>id</code> equals its <code>parcelId</code> and it is partitioned by <code>/neighborhoodId</code> - the same keys that join back to the SQL tables. You'll flatten the nested structure into <code>property_profile</code> and explode <code>inspections[]</code> into <code>fact_inspection</code> in Silver.
+                        </div>
+                    </div>
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section id="part-c">
+        <h2>Part C - Create the ADLS Shortcut <span class="pill ai">SHORTCUT</span></h2>
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Create the Bronze Lakehouse</h3>
+                <div class="step-body">
+                    <p>Click <strong>+ New item</strong> &rarr; <strong>Lakehouse</strong> &rarr; name it <code>BronzeLakehouse</code>.</p>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Shortcut the appeal files</h3>
+                <div class="step-body">
+                    <p>Under <strong>Files</strong>, right-click &rarr; <strong>New shortcut</strong> &rarr; <strong>Azure Data Lake Storage Gen2</strong>. Connect to the supplied appeal-data path and name the shortcut <code>appeals</code>.</p>
+                    <p>Confirm both <code>assessment_appeals.json</code> and <code>assessment_appeals.parquet</code> are visible under <code>Files/appeals/</code>.</p>
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section id="validation">
+        <h2>Validation</h2>
+        <p>Prove all three sources are readable. Open the Bronze Lakehouse SQL analytics endpoint (or a notebook) and run quick checks:</p>
+<div class="code-block">
+<span class="lang-badge">T-SQL</span>
+<pre><code>-- SQL mirror is queryable
+SELECT TOP 5 ParcelId, NeighborhoodId, PropertyClassCode FROM Parcel;
+
+-- Assessment values are present (AssessedValue re-derived later in Silver)
+SELECT TOP 5 ParcelId, TaxYear, LandValue, ImprovementValue FROM Assessment;</code></pre>
+</div>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code># Read the Parquet appeals from the shortcut and count records
+appeals = spark.read.parquet("Files/appeals/assessment_appeals.parquet")
+print("appeal records:", appeals.count())
+display(appeals.select("appealId", "parcelId", "reasonCode", "status").limit(5))</code></pre>
+</div>
+
+    </section>
+
+    <section id="recap">
+        <h2>What You Just Built</h2>
+        <table>
+            <thead><tr><th>Object</th><th>Type</th><th>How it got there</th><th>Source</th></tr></thead>
+            <tbody>
+                <tr><td>Assessment tables (×8)</td><td><span class="pill lakehouse">Mirrored Delta</span></td><td>Mirrored Azure SQL (CDC)</td><td>Azure SQL</td></tr>
+                <tr><td><code>properties</code></td><td><span class="pill lakehouse">Mirrored Delta</span></td><td>Mirrored Cosmos DB (change feed)</td><td>Cosmos DB</td></tr>
+                <tr><td><code>appeals</code></td><td><span class="pill ai">Shortcut</span></td><td>OneLake shortcut (zero copy)</td><td>ADLS Gen2</td></tr>
+            </tbody>
+        </table>
+        <p>Goal 2 conforms these raw sources into a clean <strong>Silver</strong> model with notebooks.</p>
+    </section>
+
+    <section id="references">
+        <h2>References</h2>
+        <ul>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/mirroring/overview" target="_blank" rel="noopener">What is Mirroring in Microsoft Fabric?</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/database/mirrored-database/azure-sql-database" target="_blank" rel="noopener">Mirror Azure SQL Database in Fabric</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/database/mirrored-database/azure-cosmos-db" target="_blank" rel="noopener">Mirror Azure Cosmos DB in Fabric</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/onelake/create-adls-shortcut" target="_blank" rel="noopener">Create an ADLS Gen2 shortcut</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/onelake/onelake-shortcuts" target="_blank" rel="noopener">OneLake shortcuts overview</a></li>
+        </ul>
+    </section>
+
+    <nav class="module-nav">
+        <a class="nav-card" href="module-1-workspace-tour.html">
+            <div class="nav-direction">← Back</div>
+            <div class="nav-title">Data Estate</div>
+        </a>
+        <a class="nav-card next" href="module-3-silver-transform.html">
+            <div class="nav-direction">Next →</div>
+            <div class="nav-title">Build the Silver Layer</div>
+        </a>
+    </nav>
+
+</div>
+
+<footer class="site-footer">
+    <p><span class="footer-brand">Property Assessment Data Lab</span></p>
+</footer>
+
+</body>
+</html>

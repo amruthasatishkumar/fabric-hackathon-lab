@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Direct Lake + Power BI - Property Assessment Lab</title>
+    <link rel="stylesheet" href="assets/css/data-lab.css" />
+    <script src="assets/js/print.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="brand">
+        <img class="ms-logo" src="assets/images/logo-msft.svg" alt="Microsoft" />
+        <div>
+            <div class="event-title">Property Assessment Data Lab</div>
+            <div class="event-subtitle">Sudsberry · Property Assessment on Microsoft Fabric</div>
+        </div>
+    </div>
+    <div class="module-pill">Goal 4 · Gold</div>
+</header>
+
+<div class="page-wrap">
+
+    <div class="module-hero">
+        <div class="module-eyebrow">Goal 4 · Gold</div>
+        <h1>Direct Lake Semantic Model + Power BI</h1>
+        <p class="lead">
+            Build a <strong>Direct Lake</strong> star-schema semantic model over your curated tables and ship a
+            property-assessment report. No import, no DirectQuery overhead - Power BI reads the Delta files in
+            OneLake directly, with live data freshness.
+        </p>
+    </div>
+
+    <section id="objectives">
+        <h2>Learning Objectives</h2>
+        <ul>
+            <li>Create a <strong>Direct Lake semantic model</strong> with a star schema.</li>
+            <li>Keep assessments, sales, inspections, and appeals as separate facts at their natural grains.</li>
+            <li>Author core property-assessment <strong>DAX measures</strong>.</li>
+            <li>Auto-create and polish a report; verify Direct Lake storage mode.</li>
+        </ul>
+    </section>
+
+    <section id="part-a">
+        <h2>Build the Semantic Model <span class="pill report">DIRECT LAKE</span></h2>
+
+        <div class="callout info">
+            <span class="callout-icon">ⓘ</span>
+            <div class="callout-content">
+                <strong>What is Direct Lake?</strong> A Power BI storage mode that reads Delta files in OneLake directly - import-mode performance with live freshness. The semantic model is just metadata pointing at your Lakehouse tables.
+            </div>
+        </div>
+
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Create the semantic model</h3>
+                <div class="step-body">
+                    <p>From <code>SilverLakehouse</code>, click <strong>New semantic model</strong>. Pick the star-schema tables:</p>
+                    <ul>
+                        <li>Dimensions: <code>dim_parcel</code>, <code>dim_neighborhood</code>, <code>dim_property_class</code> (add a <code>Date</code> dimension if available)</li>
+                        <li>Facts: <code>fact_assessment</code>, <code>fact_sale</code>, <code>fact_inspection</code>, <code>fact_appeal_ai</code></li>
+                    </ul>
+                    <p>Name it <code>Property Assessment Model</code>. Click <strong>Confirm</strong>.</p>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Define relationships</h3>
+                <div class="step-body">
+                    <p>Open the model &rarr; <strong>Model view</strong> and draw:</p>
+<div class="code-block">
+<span class="lang-badge">Relationships</span>
+<pre><code>fact_assessment[parcel_id]  ──*──1── dim_parcel[parcel_id]
+fact_sale[parcel_id]        ──*──1── dim_parcel[parcel_id]
+fact_inspection[parcel_id]  ──*──1── dim_parcel[parcel_id]
+fact_appeal_ai[parcel_id]   ──*──1── dim_parcel[parcel_id]
+dim_parcel[neighborhood_id] ──*──1── dim_neighborhood[neighborhood_id]
+dim_parcel[property_class_code] ──*──1── dim_property_class[property_class_code]</code></pre>
+</div>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Add core measures</h3>
+                <div class="step-body">
+                    <p>Right-click <code>fact_assessment</code> &rarr; <strong>New measure</strong>. Add the property-assessment measures:</p>
+<div class="code-block">
+<span class="lang-badge">DAX</span>
+<pre><code>Total Assessed Value = SUM(fact_assessment[assessed_value])
+
+Average Assessed Value = AVERAGE(fact_assessment[assessed_value])
+
+Assessment to Sale Ratio =
+    DIVIDE(
+        AVERAGE(fact_assessment[assessed_value]),
+        AVERAGE(fact_sale[sale_price]),
+        BLANK()
+    )
+
+Appeal Count = DISTINCTCOUNT(fact_appeal_ai[appeal_id])
+
+Negative Sentiment Rate =
+    DIVIDE(
+        CALCULATE([Appeal Count], fact_appeal_ai[ai_sentiment] = "negative"),
+        [Appeal Count],
+        0
+    )</code></pre>
+</div>
+                    <div class="callout tip">
+                        <span class="callout-icon">✨</span>
+                        <div class="callout-content">
+                            Other useful measures from the repo: year-over-year valuation change, estimated tax, appeal rate, median requested adjustment, resolution rate, average resolution days, and AI enrichment success rate.
+                        </div>
+                    </div>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Create and polish the report</h3>
+                <div class="step-body">
+                    <p>Top of the model &rarr; <strong>Create report</strong> &rarr; <strong>Auto-create</strong>, then refine. Report ideas from the repo:</p>
+                    <ol>
+                        <li>Assessment overview: values, taxes, classes, and neighbourhood trends.</li>
+                        <li>Comparable sales: assessment-to-sale distributions and outliers.</li>
+                        <li>Appeal operations: volume, status, reasons, resolution time, and outcomes.</li>
+                        <li>Appeal intelligence: sentiment, summaries, themes, and follow-up signals.</li>
+                        <li>Property detail: parcel, building, assessment, sale, inspection, and appeal history.</li>
+                    </ol>
+                    <p>Save as <code>Property Assessment Insights</code>.</p>
+                    <div class="callout tip">
+                        <span class="callout-icon">✨</span>
+                        <div class="callout-content">
+                            <strong>Let Copilot build it.</strong> In the report canvas, click <strong>Copilot</strong> and ask, e.g., <em>"Create a page showing average assessed value by neighbourhood and appeal count by reason."</em> The Direct Lake model gives it the schema and measures to ground responses.
+                        </div>
+                    </div>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Validate Direct Lake mode</h3>
+                <div class="step-body">
+                    <p>In the model settings, each table's <strong>Storage mode</strong> should read <code>Direct Lake</code>. If it shows <code>DirectQuery</code>, the capacity may not support Direct Lake - contact lab support.</p>
+                </div>
+            </li>
+        </ol>
+
+    </section>
+
+    <section id="recap">
+        <h2>What You Just Built</h2>
+        <ul>
+            <li>A Direct Lake star-schema semantic model over your curated property data.</li>
+            <li>Core assessment, sales-ratio, and appeal measures.</li>
+            <li>A property-assessment Power BI report on live OneLake data.</li>
+        </ul>
+        <p>Next, a <strong>Fabric Ontology</strong> (<code>PropertyAssessmentOntology</code>) over the Gold marts lets the Data Agent traverse Property, Neighborhood, ComparableSale, and Appeal relationships directly.</p>
+    </section>
+
+    <section id="references">
+        <h2>References</h2>
+        <ul>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/fundamentals/direct-lake-overview" target="_blank" rel="noopener">Direct Lake Overview</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/power-bi/guidance/star-schema" target="_blank" rel="noopener">Star schema guidance</a></li>
+        </ul>
+    </section>
+
+    <nav class="module-nav">
+        <a class="nav-card" href="module-5-gold-marts.html">
+            <div class="nav-direction">← Back</div>
+            <div class="nav-title">Gold Business Marts</div>
+        </a>
+        <a class="nav-card next" href="module-7-ontologies.html">
+            <div class="nav-direction">Next →</div>
+            <div class="nav-title">Fabric Ontology</div>
+        </a>
+    </nav>
+
+</div>
+
+<footer class="site-footer">
+    <p><span class="footer-brand">Property Assessment Data Lab</span></p>
+</footer>
+
+</body>
+</html>

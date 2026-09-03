@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Data Estate &amp; Solution Architecture - Property Assessment Lab</title>
+    <link rel="stylesheet" href="assets/css/data-lab.css" />
+    <script src="assets/js/print.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="brand">
+        <img class="ms-logo" src="assets/images/logo-msft.svg" alt="Microsoft" />
+        <div>
+            <div class="event-title">Property Assessment Data Lab</div>
+            <div class="event-subtitle">Sudsberry · Property Assessment on Microsoft Fabric</div>
+        </div>
+    </div>
+    <div class="module-pill">Get started</div>
+</header>
+
+<div class="page-wrap">
+
+    <div class="module-hero">
+        <div class="module-eyebrow">Get started</div>
+        <h1>Data Estate &amp; Solution Architecture</h1>
+        <p class="lead">
+            This module introduces the Sudsberry property assessment scenario, the three source systems,
+            the shared business keys that tie them together, and the medallion you'll build. Use it as a
+            map for the goal modules that follow.
+        </p>
+    </div>
+
+    <section id="scenario">
+        <h2>Scenario - The Municipality of Sudsberry</h2>
+        <p>
+            Sudsberry is a fictional municipality that assesses property values, tracks sales and inspections,
+            and processes assessment appeals. Its data lives in three very different systems, and the assessor's
+            office wants one governed view for analytics and natural-language questions.
+        </p>
+
+        <div class="two-col">
+            <div class="domain-block health">
+                <div class="domain-label">🏠 VALUATION &amp; SALES</div>
+                <h3>Azure SQL - system of record</h3>
+                <p><strong>Relational:</strong> Jurisdiction, Neighborhood, PropertyClass, Parcel, Building, Assessment, Sale, and TaxRate tables, plus a <code>vw_PropertyTaxRoll</code> view exposing combined rate and estimated tax.</p>
+            </div>
+            <div class="domain-block transit">
+                <div class="domain-label">📋 PROPERTY PROFILES</div>
+                <h3>Cosmos DB - property profiles</h3>
+                <p><strong>Documents:</strong> one JSON profile per parcel (partitioned by <code>/neighborhoodId</code>, <code>id</code> = <code>parcelId</code>) with nested jurisdiction, site, building, current assessment, and an <code>inspections[]</code> array.</p>
+            </div>
+        </div>
+        <div class="two-col">
+            <div class="domain-block health">
+                <div class="domain-label">📝 APPEALS</div>
+                <h3>ADLS Gen2 - appeal narratives</h3>
+                <p><strong>Files:</strong> assessment appeals as equivalent JSON and Parquet, including a free-text <code>narrative</code> for AI enrichment and a <code>groundTruthSentiment</code> label for evaluation.</p>
+            </div>
+            <div class="domain-block transit">
+                <div class="domain-label">🔑 SHARED KEYS</div>
+                <h3>How the sources join</h3>
+                <p><code>parcelId</code> joins parcels, assessments, sales, profiles, inspections, and appeals. <code>neighborhoodId</code>, <code>taxYear</code>, and <code>propertyClassCode</code> group and align the data. Normalize key casing and types in Silver before joining.</p>
+            </div>
+        </div>
+
+        <div class="callout purple">
+            <span class="callout-icon">💡</span>
+            <div class="callout-content">
+                <strong>Why one platform.</strong> Three sources, three shapes (relational, document, file) - and one Fabric workspace that unifies them on OneLake without copying data out of the sources. The assessor's office can then ask questions in plain English and get answers grounded across valuations, sales, inspections, and appeals.
+            </div>
+        </div>
+
+        <div class="callout warning">
+            <span class="callout-icon">⚠</span>
+            <div class="callout-content">
+                <strong>Synthetic data.</strong> All addresses, parcels, assessments, sales, and tax figures are fabricated. Map coordinates are demonstration points. AI outputs are decision support only and must be reviewed before any use.
+            </div>
+        </div>
+    </section>
+
+    <section id="architecture">
+        <h2>End-to-End Architecture</h2>
+        <p>The diagram below traces Sudsberry end to end. Each stage corresponds to a goal in this lab.</p>
+
+        <div class="diagram">
+            <object type="image/svg+xml" data="assets/images/architecture-overview.svg" style="width:100%;">
+                Architecture diagram
+            </object>
+            <div class="caption">Figure 1.1 - Sudsberry end-to-end architecture, from three sources through the medallion to serving.</div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:14%">Layer</th>
+                    <th style="width:46%">What lives here</th>
+                    <th style="width:20%">Built in</th>
+                    <th style="width:20%">How</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Sources</strong></td>
+                    <td>Azure SQL (relational system of record), Cosmos DB (property profiles + inspections), ADLS Gen2 (appeal JSON/Parquet).</td>
+                    <td>(pre-provisioned)</td>
+                    <td>Facilitator-supplied</td>
+                </tr>
+                <tr>
+                    <td><strong>Bronze</strong></td>
+                    <td><code>BronzeLakehouse</code> - SQL and Cosmos mirrored into OneLake, ADLS appeals reached through a OneLake shortcut.</td>
+                    <td>Goal 1</td>
+                    <td>Mirroring + shortcut</td>
+                </tr>
+                <tr>
+                    <td><strong>Silver + AI</strong></td>
+                    <td><code>SilverLakehouse</code> - conformed dimensions and facts; appeal narratives enriched with AI signals and evaluated against ground truth.</td>
+                    <td>Goals 2-3</td>
+                    <td>Notebooks</td>
+                </tr>
+                <tr>
+                    <td><strong>Gold + serve</strong></td>
+                    <td><code>GoldLakehouse</code> - business marts, a Direct Lake semantic model, a report, an ontology, and a Fabric Data Agent.</td>
+                    <td>Goal 4</td>
+                    <td>Notebook + BI + agent</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section id="medallion">
+        <h2>The Medallion You'll Build</h2>
+        <p>Standard medallion: raw <strong>Bronze</strong> (mirrors + shortcut), conformed <strong>Silver</strong> (plus AI on appeals), and serving <strong>Gold</strong> (marts, semantic model, agent).</p>
+
+        <div class="diagram">
+            <svg viewBox="0 0 1000 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif" style="max-width:100%;">
+                <defs>
+                    <linearGradient id="bronze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cd7f32"/><stop offset="1" stop-color="#a0541d"/></linearGradient>
+                    <linearGradient id="silver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c0c0c0"/><stop offset="1" stop-color="#9e9e9e"/></linearGradient>
+                    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd700"/><stop offset="1" stop-color="#daa520"/></linearGradient>
+                    <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#605e5c"/></marker>
+                </defs>
+
+                <rect x="20"  y="65" width="180" height="70" rx="8" fill="url(#bronze)"/>
+                <text x="110" y="92"  fill="#fff" font-size="14" font-weight="600" text-anchor="middle">BRONZE</text>
+                <text x="110" y="112" fill="#fff" font-size="11" text-anchor="middle">Mirrors + shortcut (Goal 1)</text>
+
+                <rect x="270" y="65" width="180" height="70" rx="8" fill="url(#silver)"/>
+                <text x="360" y="90"  fill="#1f1f1f" font-size="14" font-weight="600" text-anchor="middle">SILVER</text>
+                <text x="360" y="108" fill="#1f1f1f" font-size="11" text-anchor="middle">Conformed + AI</text>
+                <text x="360" y="124" fill="#1f1f1f" font-size="11" text-anchor="middle">(Goals 2-3)</text>
+
+                <rect x="520" y="65" width="180" height="70" rx="8" fill="url(#gold)"/>
+                <text x="610" y="92"  fill="#3a2a00" font-size="14" font-weight="600" text-anchor="middle">GOLD</text>
+                <text x="610" y="112" fill="#3a2a00" font-size="11" text-anchor="middle">Business marts (Goal 4)</text>
+
+                <rect x="770" y="55" width="210" height="90" rx="8" fill="#fff" stroke="#7c52e6" stroke-width="2"/>
+                <text x="875" y="88"  fill="#4f29a3" font-size="12" font-weight="600" text-anchor="middle">Semantic model · Ontology</text>
+                <text x="875" y="108" fill="#4f29a3" font-size="12" font-weight="600" text-anchor="middle">Report · Data Agent</text>
+                <text x="875" y="126" fill="#605e5c" font-size="11" text-anchor="middle">Goal 4</text>
+
+                <line x1="200" y1="100" x2="270" y2="100" stroke="#605e5c" stroke-width="1.5" marker-end="url(#ar1)"/>
+                <line x1="450" y1="100" x2="520" y2="100" stroke="#605e5c" stroke-width="1.5" marker-end="url(#ar1)"/>
+                <line x1="700" y1="100" x2="770" y2="100" stroke="#605e5c" stroke-width="1.5" marker-end="url(#ar1)"/>
+            </svg>
+            <div class="caption">Figure 1.2 - One batch medallion in a single Fabric workspace.</div>
+        </div>
+
+        <h3>Recommended Silver model</h3>
+        <table>
+            <thead><tr><th>Table</th><th>Grain</th><th>Source</th></tr></thead>
+            <tbody>
+                <tr><td><code>dim_jurisdiction</code> / <code>dim_neighborhood</code> / <code>dim_property_class</code></td><td>one row per reference entity</td><td>Azure SQL</td></tr>
+                <tr><td><code>dim_parcel</code> / <code>dim_building</code></td><td>one row per parcel / building</td><td>Azure SQL</td></tr>
+                <tr><td><code>fact_assessment</code> / <code>fact_sale</code></td><td>per parcel-year / per sale</td><td>Azure SQL</td></tr>
+                <tr><td><code>fact_tax_rate</code></td><td>per tax year &amp; property class</td><td>Azure SQL</td></tr>
+                <tr><td><code>property_profile</code> / <code>fact_inspection</code></td><td>per parcel profile / per inspection</td><td>Cosmos DB</td></tr>
+                <tr><td><code>fact_appeal</code> / <code>fact_appeal_ai</code></td><td>per appeal / per enriched appeal</td><td>ADLS (+ AI functions)</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Recommended Gold marts</h3>
+        <ul>
+            <li><code>property_assessment_mart</code> - parcel, class, neighbourhood, building, latest assessment, estimated tax, latest inspection.</li>
+            <li><code>comparable_sales_mart</code> - arm's-length sales matched to the closest assessment year, with assessment-to-sale ratios.</li>
+            <li><code>appeal_intelligence_mart</code> - appeal lifecycle plus AI sentiment, summary, classification, and follow-up signal.</li>
+            <li><code>neighborhood_equity_mart</code> - valuation, sales-ratio, appeal-rate, and sentiment aggregates by neighbourhood.</li>
+        </ul>
+    </section>
+
+    <section id="recap">
+        <h2>What You Just Learned</h2>
+        <ul>
+            <li>The Sudsberry scenario (3 sources, 3 data shapes, 1 platform).</li>
+            <li>The shared business keys that let the sources join cleanly.</li>
+            <li>The Bronze &rarr; Silver &rarr; Gold medallion and the target Silver model and Gold marts.</li>
+            <li>The synthetic-data and responsible-AI ground rules for the lab.</li>
+        </ul>
+        <p>Continue to <strong>Goal 1</strong> to connect the three sources into Bronze.</p>
+    </section>
+
+    <nav class="module-nav">
+        <a class="nav-card" href="index.html">
+            <div class="nav-direction">← Back</div>
+            <div class="nav-title">Use Case</div>
+        </a>
+        <a class="nav-card next" href="module-2-bronze-ingestion.html">
+            <div class="nav-direction">Next →</div>
+            <div class="nav-title">Connect the Sources</div>
+        </a>
+    </nav>
+
+</div>
+
+<footer class="site-footer">
+    <p><span class="footer-brand">Property Assessment Data Lab</span></p>
+</footer>
+
+</body>
+</html>

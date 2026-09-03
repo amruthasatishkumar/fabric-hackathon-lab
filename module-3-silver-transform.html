@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Build the Silver Layer - Property Assessment Lab</title>
+    <link rel="stylesheet" href="assets/css/data-lab.css" />
+    <script src="assets/js/print.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="brand">
+        <img class="ms-logo" src="assets/images/logo-msft.svg" alt="Microsoft" />
+        <div>
+            <div class="event-title">Property Assessment Data Lab</div>
+            <div class="event-subtitle">Sudsberry · Property Assessment on Microsoft Fabric</div>
+        </div>
+    </div>
+    <div class="module-pill">Goal 2 · Silver</div>
+</header>
+
+<div class="page-wrap">
+
+    <div class="module-hero">
+        <div class="module-eyebrow">Goal 2 · Silver</div>
+        <h1>Build the Silver Layer</h1>
+        <p class="lead">
+            Bronze holds the raw source shapes; <strong>Silver</strong> makes them analytics-ready. Three notebooks
+            conform the mirrored SQL tables into typed dimensions and facts, flatten the Cosmos property
+            documents, explode the nested inspection arrays, and ingest the ADLS appeals - writing managed Delta
+            into a dedicated <code>SilverLakehouse</code>.
+        </p>
+    </div>
+
+    <section id="objectives">
+        <h2>Learning Objectives</h2>
+        <ul>
+            <li>Create a <code>SilverLakehouse</code> and read the Bronze mirrors and shortcut cross-Lakehouse.</li>
+            <li>Conform casing and types for the shared keys (<code>parcelId</code>, <code>neighborhoodId</code>, <code>taxYear</code>, <code>propertyClassCode</code>).</li>
+            <li>Re-derive <code>assessed_value</code> (land + improvement) that mirroring may omit.</li>
+            <li><strong>Flatten</strong> Cosmos property documents (including <code>longitude</code>/<code>latitude</code>) and <strong>explode</strong> the <code>inspections[]</code> array.</li>
+            <li>Ingest the ADLS appeals into a typed <code>fact_appeal</code> (AI enrichment follows in Goal 3).</li>
+        </ul>
+    </section>
+
+    <section id="setup">
+        <h2>Set Up the Silver Lakehouse &amp; Notebooks</h2>
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Create <code>SilverLakehouse</code> with schemas enabled</h3>
+                <div class="step-body">
+                    <p>Click <strong>+ New item</strong> &rarr; <strong>Lakehouse</strong> &rarr; name it <code>SilverLakehouse</code> and enable <strong>Lakehouse schemas</strong> so tables land in the <code>dbo</code> schema.</p>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Import the three Silver notebooks</h3>
+                <div class="step-body">
+                    <p>Import <strong>1 - SQL Assessment to Silver</strong>, <strong>2 - Cosmos Property Profiles to Silver</strong>, and <strong>3 - ADLS Appeals to Silver and AI</strong>. Each notebook exposes logical Fabric item names in a parameter cell near the top - set them to the names you recorded in Goal 1. Attach <code>SilverLakehouse</code> as the default and add <code>BronzeLakehouse</code> as a source. In this goal you run notebook 3's <strong>ingestion</strong> cells only; its AI cells run in Goal 3.</p>
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section id="notebook-1">
+        <h2>Notebook 1 - SQL Assessment to Silver</h2>
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Conform every mirrored SQL table into Silver</h3>
+                <div class="step-body">
+                    <p>Snake-case every column, trim strings, enforce the business keys, and write one managed Delta table per source. The <code>Assessment</code> table re-derives <code>assessed_value</code> (mirroring may drop the computed column), and <code>TaxRate</code> becomes <code>fact_tax_rate</code> keeping its <code>municipal_rate</code>, <code>regional_rate</code>, and <code>education_rate</code> components (Gold combines them):</p>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>import re
+from pyspark.sql import functions as F
+from pyspark.sql.types import StringType
+
+def snake_case(name):
+    name = re.sub(r"(?&lt;=[a-z0-9])(?=[A-Z])", "_", name)
+    return name.replace(" ", "_").lower()
+
+# source SQL table -> (Silver table, business keys that must be unique)
+table_map = {
+    "Jurisdiction":  ("dim_jurisdiction",   ["JurisdictionId"]),
+    "Neighborhood":  ("dim_neighborhood",   ["NeighborhoodId"]),
+    "PropertyClass": ("dim_property_class", ["PropertyClassCode"]),
+    "Parcel":        ("dim_parcel",         ["ParcelId"]),
+    "Building":      ("dim_building",        ["BuildingId"]),
+    "Assessment":    ("fact_assessment",     ["ParcelId", "TaxYear"]),
+    "Sale":          ("fact_sale",           ["SaleId"]),
+    "TaxRate":       ("fact_tax_rate",       ["TaxYear", "PropertyClassCode"]),
+}
+
+for source_table, (target_table, source_keys) in table_map.items():
+    frame = spark.read.table(f"BronzeLakehouse.{source_table}")
+    for column in frame.columns:                       # snake_case every column
+        frame = frame.withColumnRenamed(column, snake_case(column))
+    for field in frame.schema.fields:                  # trim string columns
+        if isinstance(field.dataType, StringType):
+            frame = frame.withColumn(field.name, F.trim(F.col(field.name)))
+    if target_table == "fact_assessment":              # re-derive computed column
+        frame = frame.withColumn("assessed_value", F.col("land_value") + F.col("improvement_value"))
+    keys = [snake_case(k) for k in source_keys]
+    frame = frame.dropna(subset=keys).dropDuplicates(keys)
+    (frame.write.format("delta").mode("overwrite")
+          .option("overwriteSchema", "true").saveAsTable(target_table))
+    print(target_table, frame.count(), "rows")</code></pre>
+</div>
+                    <div class="callout info">
+                        <span class="callout-icon">ⓘ</span>
+                        <div class="callout-content">
+                            Keeping the three rate components in <code>fact_tax_rate</code> (rather than a pre-summed rate) lets Gold compute <code>combined_rate</code> and <code>estimated_tax</code> transparently.
+                        </div>
+                    </div>
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section id="notebook-2">
+        <h2>Notebook 2 - Cosmos Property Profiles to Silver</h2>
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Flatten the property document</h3>
+                <div class="step-body">
+                    <p>Read the mirrored Cosmos <code>properties</code> container and flatten the nested <code>jurisdiction</code>, <code>location</code>, <code>site</code>, <code>building</code>, and <code>currentAssessment</code> objects into one row per parcel. The GeoJSON <code>coordinates</code> array is <strong>longitude first</strong>, then latitude:</p>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>raw = spark.read.table("BronzeLakehouse.properties")
+
+property_profile = (
+    raw
+    .withColumn("parcel_id",               F.col("parcelId"))
+    .withColumn("document_type",           F.col("documentType"))
+    .withColumn("synthetic",               F.col("synthetic").cast("boolean"))
+    .withColumn("neighborhood_id",         F.col("neighborhoodId"))
+    .withColumn("neighborhood_name",       F.col("neighborhoodName"))
+    .withColumn("country_code",            F.col("jurisdiction.countryCode"))
+    .withColumn("region_code",             F.col("jurisdiction.regionCode"))
+    .withColumn("currency_code",           F.col("jurisdiction.currencyCode"))
+    .withColumn("longitude",               F.col("location.coordinates")[0].cast("double"))  # GeoJSON: longitude first
+    .withColumn("latitude",                F.col("location.coordinates")[1].cast("double"))
+    .withColumn("synthetic_address",       F.col("site.syntheticAddress"))
+    .withColumn("property_class_code",     F.col("site.propertyClassCode"))
+    .withColumn("zoning_code",             F.col("site.zoningCode"))
+    .withColumn("lot_area_square_metres",  F.col("site.lotAreaSquareMetres").cast("double"))
+    .withColumn("building_type",           F.col("building.type"))
+    .withColumn("year_built",              F.col("building.yearBuilt").cast("int"))
+    .withColumn("floor_area_square_metres",F.col("building.floorAreaSquareMetres").cast("double"))
+    .withColumn("building_condition",      F.col("building.condition"))
+    .withColumn("current_tax_year",        F.col("currentAssessment.taxYear").cast("int"))
+    .withColumn("current_assessed_value",  F.col("currentAssessment.assessedValue").cast("double"))
+    .withColumn("confidence_score",        F.col("currentAssessment.confidenceScore").cast("double"))
+    .select("parcel_id", "document_type", "synthetic", "neighborhood_id", "neighborhood_name",
+            "country_code", "region_code", "currency_code", "longitude", "latitude",
+            "synthetic_address", "property_class_code", "zoning_code", "lot_area_square_metres",
+            "building_type", "year_built", "floor_area_square_metres", "building_condition",
+            "current_tax_year", "current_assessed_value", "confidence_score")
+    .dropna(subset=["parcel_id", "neighborhood_id"])
+    .dropDuplicates(["parcel_id"])
+)
+(property_profile.write.format("delta").mode("overwrite")
+    .option("overwriteSchema", "true").saveAsTable("property_profile"))</code></pre>
+</div>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Explode the inspections array</h3>
+                <div class="step-body">
+                    <p>Each profile carries an <code>inspections[]</code> array. Use <code>explode_outer</code> so parcels without inspections are retained, and keep the <code>observations</code> array:</p>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>fact_inspection = (
+    raw
+    .withColumn("parcel_id", F.col("parcelId"))
+    .withColumn("inspection", F.explode_outer("inspections"))
+    .select(
+        "parcel_id",
+        F.col("inspection.inspectionId").alias("inspection_id"),
+        F.col("inspection.inspectionDate").cast("date").alias("inspection_date"),
+        F.col("inspection.inspectionType").alias("inspection_type"),
+        F.col("inspection.condition").alias("condition"),
+        F.col("inspection.observations").alias("observations"),
+        F.col("inspection.followUpRequired").cast("boolean").alias("follow_up_required"),
+    )
+    .dropna(subset=["parcel_id", "inspection_id"])
+    .dropDuplicates(["inspection_id"])
+)
+(fact_inspection.write.format("delta").mode("overwrite")
+    .option("overwriteSchema", "true").saveAsTable("fact_inspection"))
+print("fact_inspection:", fact_inspection.count(), "rows")</code></pre>
+</div>
+                    <div class="callout info">
+                        <span class="callout-icon">ⓘ</span>
+                        <div class="callout-content">
+                            <code>explode_outer</code> turns one document with an array of inspections into tidy rows - the shape a star-schema join and a semantic model expect.
+                        </div>
+                    </div>
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section id="notebook-3">
+        <h2>Notebook 3 - ADLS Appeals to Silver (ingestion)</h2>
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Conform the appeals into <code>fact_appeal</code></h3>
+                <div class="step-body">
+                    <p>Import <strong>3 - ADLS Appeals to Silver and AI</strong> and run its <strong>ingestion cells now</strong> - the AI cells run in Goal 3. Read the Parquet from the Bronze <code>appeals</code> shortcut, snake-case and type the columns, keep the raw <code>narrative</code> and <code>ground_truth_sentiment</code>, and write <code>fact_appeal</code>:</p>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>raw = spark.read.parquet("Files/appeals/assessment_appeals.parquet")  # BronzeLakehouse shortcut
+for column in raw.columns:
+    raw = raw.withColumnRenamed(column, snake_case(column))
+
+fact_appeal = (
+    raw
+    .withColumn("tax_year",                 F.col("tax_year").cast("int"))
+    .withColumn("submitted_date",           F.to_date("submitted_date"))
+    .withColumn("resolved_date",            F.to_date("resolved_date"))
+    .withColumn("requested_adjustment_pct", F.col("requested_adjustment_pct").cast("double"))
+    .withColumn("synthetic",                F.col("synthetic").cast("boolean"))
+    .dropna(subset=["appeal_id", "parcel_id", "reason_code", "narrative"])
+    .dropDuplicates(["appeal_id"])
+)
+(fact_appeal.write.format("delta").mode("overwrite")
+    .option("overwriteSchema", "true").saveAsTable("fact_appeal"))
+print("fact_appeal:", fact_appeal.count(), "rows")</code></pre>
+</div>
+                    <div class="callout info">
+                        <span class="callout-icon">ⓘ</span>
+                        <div class="callout-content">
+                            Ingestion (this typed <code>fact_appeal</code>) belongs to Goal 2. Goal 3 adds the AI signal columns and writes <code>fact_appeal_ai</code>.
+                        </div>
+                    </div>
+                </div>
+            </li>
+        </ol>
+    </section>
+
+    <section id="validation">
+        <h2>Validate Silver</h2>
+        <div class="step-body">
+            <p>Confirm the conformed model joins end to end on the shared keys:</p>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>display(spark.sql("""
+    SELECT n.neighborhood_name,
+           COUNT(DISTINCT p.parcel_id)   AS parcels,
+           ROUND(AVG(a.assessed_value))  AS avg_assessed_value,
+           COUNT(i.inspection_id)         AS inspections
+    FROM dim_parcel p
+    JOIN dim_neighborhood n ON n.neighborhood_id = p.neighborhood_id
+    LEFT JOIN fact_assessment a ON a.parcel_id = p.parcel_id
+    LEFT JOIN fact_inspection  i ON i.parcel_id = p.parcel_id
+    GROUP BY n.neighborhood_name
+    ORDER BY avg_assessed_value DESC
+"""))</code></pre>
+</div>
+        </div>
+
+    </section>
+
+    <section id="recap">
+        <h2>What You Just Built</h2>
+        <p>A conformed Silver model - typed dimensions, assessment and sale facts, a <code>fact_tax_rate</code> reference, a flattened property profile with coordinates, an exploded inspection fact, and a typed <code>fact_appeal</code> - ready for AI enrichment (Goal 3) and the Gold marts that follow.</p>
+    </section>
+
+    <section id="references">
+        <h2>References</h2>
+        <ul>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/data-engineering/how-to-use-notebook" target="_blank" rel="noopener">Use notebooks in Microsoft Fabric</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/data-engineering/tutorial-lakehouse-data-preparation" target="_blank" rel="noopener">Prepare &amp; transform Lakehouse data</a></li>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/data-engineering/lakehouse-overview" target="_blank" rel="noopener">Lakehouse in Microsoft Fabric</a></li>
+        </ul>
+    </section>
+
+    <nav class="module-nav">
+        <a class="nav-card" href="module-2-bronze-ingestion.html">
+            <div class="nav-direction">← Back</div>
+            <div class="nav-title">Connect the Sources</div>
+        </a>
+        <a class="nav-card next" href="module-4-ai-insights.html">
+            <div class="nav-direction">Next →</div>
+            <div class="nav-title">AI on Appeal Narratives</div>
+        </a>
+    </nav>
+
+</div>
+
+<footer class="site-footer">
+    <p><span class="footer-brand">Property Assessment Data Lab</span></p>
+</footer>
+
+</body>
+</html>

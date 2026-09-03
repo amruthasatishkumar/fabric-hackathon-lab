@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI on Appeal Narratives - Property Assessment Lab</title>
+    <link rel="stylesheet" href="assets/css/data-lab.css" />
+    <script src="assets/js/print.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="brand">
+        <img class="ms-logo" src="assets/images/logo-msft.svg" alt="Microsoft" />
+        <div>
+            <div class="event-title">Property Assessment Data Lab</div>
+            <div class="event-subtitle">Sudsberry · Property Assessment on Microsoft Fabric</div>
+        </div>
+    </div>
+    <div class="module-pill">Goal 3 · AI</div>
+</header>
+
+<div class="page-wrap">
+
+    <div class="module-hero">
+        <div class="module-eyebrow">Goal 3 · AI</div>
+        <h1>AI on Appeal Narratives</h1>
+        <p class="lead">
+            Assessment appeals arrive as free text. Starting from the <code>fact_appeal</code> you ingested in Goal 2,
+            this module uses Fabric's <code>ai.*</code> functions to derive a <strong>sentiment</strong> label, a concise
+            <strong>summary</strong>, a normalized <strong>reason classification</strong>, and a <strong>follow-up</strong>
+            signal - keeping the original narrative and storing AI output in new columns. You then
+            <strong>evaluate</strong> the results against a supplied ground-truth label.
+        </p>
+    </div>
+
+    <section id="objectives">
+        <h2>Learning Objectives</h2>
+        <ul>
+            <li>Start from <code>dbo.fact_appeal</code> (ingested in Goal 2) and run notebook 3's AI cells.</li>
+            <li>Derive <strong>sentiment</strong>, <strong>summary</strong>, <strong>reason classification</strong>, and a <strong>follow-up</strong> signal with the <code>ai.*</code> functions.</li>
+            <li><strong>Evaluate</strong> AI sentiment against <code>ground_truth_sentiment</code> (accuracy, confusion matrix, reason agreement).</li>
+            <li>Apply responsible-AI checks and preserve lineage to the source appeal.</li>
+        </ul>
+    </section>
+
+    <section id="step-1">
+        <h2>Step 1 - Start from <code>fact_appeal</code></h2>
+        <div class="step-body">
+            <p>You already created <code>dbo.fact_appeal</code> in Goal 2 with notebook 3's ingestion cells (the conformed appeals with the raw <code>narrative</code> and the <code>ground_truth_sentiment</code> label). Continue in <strong>3 - ADLS Appeals to Silver and AI</strong> at the <strong>AI enrichment</strong> section - the following cell requires Fabric AI functions to be enabled.</p>
+        </div>
+    </section>
+
+    <section id="step-2">
+        <h2>Step 2 - Enrich with the <code>ai.*</code> Functions</h2>
+        <div class="step-body">
+            <p>Apply the AI functions over the appeal narrative and add the signals in new columns. Keep the original narrative:</p>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>import pandas as pd
+import synapse.ml.aifunc as aifunc
+
+pdf = spark.table("fact_appeal").toPandas()
+text = pdf["narrative"].astype(str)
+
+pdf["ai_sentiment"]  = text.ai.analyze_sentiment()
+pdf["ai_summary"]    = text.ai.summarize()
+pdf["ai_reason_code"] = text.ai.classify(
+    "COMPARABLE_SALES", "PROPERTY_CONDITION", "DATA_CORRECTION",
+    "CLASSIFICATION", "RENOVATION_TIMING", "INFORMATION_REQUEST")
+pdf["ai_follow_up"]  = text.ai.classify("urgent_follow_up", "standard_review")
+pdf["enriched_at_utc"] = pd.Timestamp.utcnow().isoformat()
+
+enriched = spark.createDataFrame(pdf)
+(enriched.write.format("delta").mode("overwrite")
+    .option("overwriteSchema", "true").saveAsTable("fact_appeal_ai"))
+display(enriched[["appeal_id", "ai_sentiment", "ai_reason_code", "ai_follow_up", "ai_summary"]].head(10))</code></pre>
+</div>
+            <div class="callout tip">
+                <span class="callout-icon">✓</span>
+                <div class="callout-content">
+                    Start with the supplied classification taxonomy, then document any changes: <code>COMPARABLE_SALES</code>, <code>PROPERTY_CONDITION</code>, <code>DATA_CORRECTION</code>, <code>CLASSIFICATION</code>, <code>RENOVATION_TIMING</code>, <code>INFORMATION_REQUEST</code>. The follow-up classifier returns <code>urgent_follow_up</code> or <code>standard_review</code>; the <code>urgent_follow_up</code> boolean is derived later in the Gold appeal mart.
+                </div>
+            </div>
+            <div class="callout purple">
+                <span class="callout-icon">✨</span>
+                <div class="callout-content">
+                    <strong>Alternate path - Azure AI Foundry.</strong> Instead of the built-in functions you can run
+                    notebook <strong>3a - ADLS Appeals with Foundry AI</strong>, which reads its endpoint, deployment, and key
+                    from a Variable Library (<code>HackathonVariables</code>) and writes <code>fact_appeal_foundry_ai</code> with the
+                    same <code>ai_*</code> signal columns. In Goal 4 the Gold notebook's <code>appeal_ai_source_table</code>
+                    parameter selects <code>fact_appeal_ai</code> (built-in) or <code>fact_appeal_foundry_ai</code> (Foundry).
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="step-3">
+        <h2>Step 3 - Evaluate Against Ground Truth</h2>
+        <div class="step-body">
+            <p>The seed data includes <code>ground_truth_sentiment</code> for technical evaluation. Compute enrichment success, sentiment accuracy, reason-code agreement, and a confusion matrix:</p>
+<div class="code-block">
+<span class="lang-badge">PySpark</span>
+<pre><code>from pyspark.sql import functions as F
+
+evaluation = (
+    spark.table("fact_appeal_ai")
+    .withColumn("enrichment_success",
+                F.col("ai_sentiment").isNotNull() &amp; F.col("ai_summary").isNotNull() &amp; F.col("ai_reason_code").isNotNull())
+    .withColumn("sentiment_match",
+                F.coalesce(F.lower("ai_sentiment") == F.lower("ground_truth_sentiment"), F.lit(False)))
+    .withColumn("reason_match",
+                F.coalesce(F.upper("ai_reason_code") == F.upper("reason_code"), F.lit(False)))
+)
+
+# Confusion matrix by ground-truth vs predicted sentiment
+display(evaluation.groupBy("ground_truth_sentiment", "ai_sentiment")
+                  .count().orderBy("ground_truth_sentiment", "ai_sentiment"))
+
+display(evaluation.agg(
+    F.count("*").alias("records"),
+    F.avg(F.col("sentiment_match").cast("double")).alias("sentiment_accuracy"),
+    F.avg(F.col("reason_match").cast("double")).alias("reason_code_accuracy"),
+    (F.lit(1.0) - F.avg(F.col("enrichment_success").cast("double"))).alias("enrichment_failure_rate"),
+))</code></pre>
+</div>
+            <div class="callout info">
+                <span class="callout-icon">ⓘ</span>
+                <div class="callout-content">
+                    Review examples where the model disagrees with the label. A useful solution does not hide uncertain or failed enrichment - surface the failure rate and the mismatches.
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="responsible-ai">
+        <h2>Responsible AI Checks</h2>
+        <div class="callout warning">
+            <span class="callout-icon">⚠</span>
+            <div class="callout-content">
+                <ul style="margin:0;">
+                    <li>Do not infer protected or personal characteristics.</li>
+                    <li>Do not use sentiment as an automatic approval or rejection rule - it is decision support only.</li>
+                    <li>Preserve lineage to the source appeal (<code>appeal_id</code>).</li>
+                    <li>Record function metadata and an enrichment timestamp (<code>enriched_at_utc</code>).</li>
+                </ul>
+            </div>
+        </div>
+
+    </section>
+
+    <section id="recap">
+        <h2>What You Just Built</h2>
+        <p>A governed, evaluated appeal-intelligence table that turns free-text narratives into structured signals with lineage and quality metrics. The Gold marts fold these signals in next.</p>
+    </section>
+
+    <section id="references">
+        <h2>References</h2>
+        <ul>
+            <li><a href="https://learn.microsoft.com/en-us/fabric/data-science/ai-functions/overview" target="_blank" rel="noopener">AI functions in Fabric (ai.*)</a></li>
+        </ul>
+    </section>
+
+    <nav class="module-nav">
+        <a class="nav-card" href="module-3-silver-transform.html">
+            <div class="nav-direction">← Back</div>
+            <div class="nav-title">Build the Silver Layer</div>
+        </a>
+        <a class="nav-card next" href="module-5-gold-marts.html">
+            <div class="nav-direction">Next →</div>
+            <div class="nav-title">Gold Business Marts</div>
+        </a>
+    </nav>
+
+</div>
+
+<footer class="site-footer">
+    <p><span class="footer-brand">Property Assessment Data Lab</span></p>
+</footer>
+
+</body>
+</html>

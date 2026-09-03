@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Get Started - Property Assessment Lab</title>
+    <link rel="stylesheet" href="assets/css/data-lab.css" />
+    <script src="assets/js/print.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+    <div class="brand">
+        <img class="ms-logo" src="assets/images/logo-msft.svg" alt="Microsoft" />
+        <div>
+            <div class="event-title">Property Assessment Data Lab</div>
+            <div class="event-subtitle">Sudsberry · Property Assessment on Microsoft Fabric</div>
+        </div>
+    </div>
+    <div class="module-pill">Get started</div>
+</header>
+
+<div class="page-wrap">
+
+    <div class="module-hero">
+        <div class="module-eyebrow">Get started</div>
+        <h1>Welcome to the Fabric Workshop</h1>
+        <p class="lead">
+            Over the next few hours you'll work through a single, real-world use case
+            end to end inside Microsoft Fabric, from raw sources all the way to an AI-grounded data agent.
+        </p>
+        <p>
+            We've prepared the use case for you to explore, the environment is already provisioned and waiting
+            for your sign-in, and our team is here to support you at every step. Everything runs in the browser,
+            so there's no Cloud PC, VS Code, or local install to set up.
+        </p>
+    </div>
+
+    <section id="accounts">
+        <h2>Login Account</h2>
+
+        <p>Use your assigned lab account to sign in to both <a href="https://app.fabric.microsoft.com" target="_blank">Fabric</a> and the <a href="https://portal.azure.com" target="_blank">Azure portal</a>. Your facilitator will tell you which user number (1-40) to use.</p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:55%">Username</th>
+                    <th style="width:45%">Password</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td><code>Fabric.User&lt;X&gt;.esri26@estdcorp.onmicrosoft.com</code></td><td><code>User_Pwd#ESRi^Fbr!Hack</code></td></tr>
+            </tbody>
+        </table>
+
+        <div class="callout info">
+            <span class="callout-icon">ⓘ</span>
+            <div class="callout-content">
+                Replace <code>&lt;X&gt;</code> with the number your facilitator assigns you, from <strong>1</strong> to <strong>40</strong> (for example <code>Fabric.User7.esri26@estdcorp.onmicrosoft.com</code>).
+            </div>
+        </div>
+
+        <div class="callout warning">
+            <span class="callout-icon">⚠</span>
+            <div class="callout-content">
+                <strong>Lab-only account.</strong> This account is scoped to the lab shared environment and deactivated after the event. Do not use it outside this lab.
+            </div>
+        </div>
+    </section>
+
+    <section id="environment">
+        <h2>Setup Checklist</h2>
+        <p>Complete these checks, then continue with the lab.</p>
+
+        <ol class="step-list">
+            <li>
+                <h3 class="step-title">Log in and review your account</h3>
+                <div class="step-body">
+                    <p>Open a browser in <strong>incognito or guest mode</strong> to avoid overlap with any other Azure accounts you're signed into, then sign in with your assigned lab account (see <a href="#accounts">Login Account</a> above).</p>
+                    <p>If you're prompted to <strong>update your password</strong>, change it to <code>User_Pwd#ESRi^Fbr!Hack&lt;N&gt;</code>, where <code>&lt;N&gt;</code> is your assigned user number.</p>
+                    <p>If you're asked to <strong>set up Authenticator</strong>, install the <strong>Microsoft Authenticator</strong> app on your mobile phone and use it to complete the setup.</p>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Sign in to the Azure portal and verify shared RG access</h3>
+                <div class="step-body">
+                    <p>Go to <a href="https://portal.azure.com" target="_blank">portal.azure.com</a> and open your resource group <code>rg-fabric-user&lt;N&gt;-use2-dev</code>, where <code>&lt;N&gt;</code> is your assigned user number.</p>
+                </div>
+            </li>
+            <li>
+                <h3 class="step-title">Sign in to Fabric</h3>
+                <div class="step-body">
+                    <p>Go to <a href="https://app.fabric.microsoft.com" target="_blank">app.fabric.microsoft.com</a>, open <strong>Workspaces</strong>, and confirm your workshop workspace is visible.</p>
+                </div>
+            </li>
+        </ol>
+
+        <div class="callout purple">
+            <span class="callout-icon">ⓘ</span>
+            <div class="callout-content">
+                <strong>Conflict prevention.</strong> Setup and environment specifics are centralized here. If there is ever a mismatch with older notes or screenshots, follow this page.
+            </div>
+        </div>
+    </section>
+
+    <section id="repo">
+        <h2>GitHub Repo</h2>
+
+        <p>You can access all the goals and notebooks we're going to work through today in this repository. Keep it open alongside the lab so you can grab the code you need at each step, and save it for future reference.</p>
+
+        <p><a class="support-btn" href="https://aka.ms/fabric_hack_27" target="_blank" rel="noopener">🐙 Open the GitHub repo</a></p>
+
+        <p>Direct link: <a href="https://aka.ms/fabric_hack_27" target="_blank" rel="noopener"><code>aka.ms/fabric_hack_27</code></a></p>
+    </section>
+
+    <section id="support">
+        <h2>Support</h2>
+
+        <p>Stuck on any step? You're not on your own. Ask the host in the room at any time, or join our Teams support call, where a team is standing by to help you through it.</p>
+
+        <p><a class="support-btn" href="https://teams.microsoft.com/l/meetup-join/19%3ameeting_ZmEzNjVkYjItZTViMC00NGI3LTg1OWUtYzQwN2EzMWQ3NWZm%40thread.v2/0?context=%7b%22Tid%22%3a%2272f988bf-86f1-41af-91ab-2d7cd011db47%22%2c%22Oid%22%3a%2257eb6d52-d0aa-428d-98d5-c0b73c75f6b4%22%7d" target="_blank" rel="noopener">📞 Join the Teams support call</a></p>
+    </section>
+
+    <nav class="module-nav">
+        <a class="nav-card next" href="index.html">
+            <div class="nav-direction">Next →</div>
+            <div class="nav-title">Use Case</div>
+        </a>
+    </nav>
+
+</div>
+
+<footer class="site-footer">
+    <p><span class="footer-brand">Property Assessment Data Lab</span></p>
+</footer>
+
+</body>
+</html>
