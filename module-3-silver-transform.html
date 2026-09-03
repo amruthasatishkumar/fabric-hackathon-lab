@@ -68,7 +68,8 @@
             <li>
                 <h3 class="step-title">Transform every mirrored SQL table into Silver</h3>
                 <div class="step-body">
-                    <p>Snake-case every column, trim strings, enforce the business keys, and write one managed Delta table per source. The <code>Assessment</code> table re-derives <code>assessed_value</code> (mirroring may drop the computed column), and <code>TaxRate</code> becomes <code>fact_tax_rate</code> keeping its <code>municipal_rate</code>, <code>regional_rate</code>, and <code>education_rate</code> components (Gold combines them):</p>
+                    <p>Notebook 1 reads the mirrored SQL tables and writes clean Silver tables. Here's what each cell does:</p>
+                    <p><strong>Cell 1 - Configure:</strong> point the notebook at <code>SilverLakehouse</code> so every table writes there.</p>
 <div class="code-block">
 <span class="lang-badge">Configure cell</span>
 <pre><code>%%configure -f
@@ -76,10 +77,12 @@
   "defaultLakehouse": { "name": "SilverLakehouse" }
 }</code></pre>
 </div>
+                    <p><strong>Cell 2 - Parameters:</strong> name the SQL mirror to read from. Change this if your lab uses a different mirror name.</p>
 <div class="code-block">
 <span class="lang-badge">PySpark</span>
 <pre><code>sql_mirror_item = "Property Assessment SQL Mirror"
 source_schema = "dbo"</code></pre>
+                    <p><strong>Cell 3 - Resolve the mirror:</strong> find the mirror by name, and set up two small helpers - one that looks up Fabric items, one that standardizes column names.</p>
 </div>
 <div class="code-block">
 <span class="lang-badge">PySpark</span>
@@ -108,6 +111,7 @@ def snake_case(name):
 mirror_id = resolve_item_id(sql_mirror_item, "MirroredDatabase")
 spark.sql("CREATE SCHEMA IF NOT EXISTS dbo")
 print(f"Resolved SQL mirror: {mirror_id}")</code></pre>
+                    <p><strong>Cell 4 - Build the Silver tables:</strong> for each source table, read it from the mirror, standardize the column names and types, re-derive the assessed value, drop empty or duplicate rows, and save it as a Silver table.</p>
 </div>
 <div class="code-block">
 <span class="lang-badge">PySpark</span>
@@ -191,7 +195,7 @@ for source_table, (target_table, source_keys) in table_map.items():
         <ol class="step-list">
             <li>
                 <h3 class="step-title">Transform the appeals into <code>fact_appeal</code></h3>
-                <div class="step-body">
+                <div class="step-body">tandardiz
                     <p>Import <strong>3 - ADLS Appeals to Silver and AI</strong> and run its <strong>ingestion cells now</strong> - the AI cells run in Goal 3. It resolves the Bronze Lakehouse, reads the appeal Parquet through the <code>appeals</code> shortcut, snake-cases and types the columns, keeps the raw <code>narrative</code> and <code>ground_truth_sentiment</code>, and writes <code>dbo.fact_appeal</code>:</p>
 <div class="code-block">
 <span class="lang-badge">Configure cell</span>
