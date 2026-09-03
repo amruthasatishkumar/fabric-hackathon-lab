@@ -282,6 +282,36 @@ pre code {
 .code-block.prompt pre code { white-space: pre-wrap; word-break: break-word; }
 .code-block.prompt pre { padding-top: 66px; }
 
+/* Notebook heading with a "download the whole notebook" button on the right */
+.nb-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: nowrap;
+    border-bottom: 2px solid var(--gray-200, #e6e3f0);
+    margin: 32px 0 6px;
+    padding-bottom: 8px;
+}
+.nb-header h2 { margin: 0; border-bottom: none; padding-bottom: 0; flex: 1 1 auto; min-width: 0; }
+.nb-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+    flex: 0 0 auto;
+    background: #7c52e6;
+    color: #fff;
+    font-weight: 600;
+    font-size: 13px;
+    text-decoration: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    transition: background 0.15s ease;
+}
+.nb-download:hover { background: #4f29a3; }
+@media print { .nb-download { display: none; } }
+
 /* Copy button on code blocks */
 .code-block .copy-btn {
     position: absolute;
