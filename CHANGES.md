@@ -1,4 +1,4 @@
-# ESRI Workshop - Change Log
+# Change log
 
 This lab guide (a copy of `lab-guide/`) is aligned to the **Fabric Property Assessment Hackathon**
 attendee repo ([nickTinMicrosoft/fabric-hackathon-attendee-accessor](https://github.com/nickTinMicrosoft/fabric-hackathon-attendee-accessor)).
